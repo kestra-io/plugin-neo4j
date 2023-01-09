@@ -1,0 +1,114 @@
+package io.kestra.plugin.neo4j;
+
+import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.tasks.RunnableTask;
+import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.FileSerde;
+import io.reactivex.BackpressureStrategy;
+import io.reactivex.Flowable;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.SuperBuilder;
+import org.neo4j.driver.*;
+import org.slf4j.Logger;
+
+import javax.validation.constraints.NotNull;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+@SuperBuilder
+@ToString
+@EqualsAndHashCode
+@Getter
+@Schema(
+    title = "Execute a batch query to a Neo4j database"
+)
+public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch.Output> {
+    @NotNull
+    @Schema(
+        title = "Source file URI"
+    )
+    @PluginProperty(dynamic = true)
+    private String from;
+
+    @NotNull
+    @Schema(
+        title = "Insert query to be executed",
+        description = "The query must have as much question mark as column in the files." +
+            "\nExample: 'insert into database values( ? , ? , ? )' for 3 columns" +
+            "\nIn case you do not want all columns, you need to precise it in the query and in the columns property" +
+            "\nExample: 'insert into(id,name) database values( ? , ? )' to select 2 columns"
+    )
+    @PluginProperty(dynamic = true)
+    private String query;
+
+    @Schema(
+        title = "The size of chunk for every bulk request"
+    )
+    @PluginProperty(dynamic = true)
+    @Builder.Default
+    @NotNull
+    private Integer chunk = 1000;
+
+
+    @Override
+    public Output run(RunContext runContext) throws Exception {
+
+        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
+            Logger logger = runContext.logger();
+
+            String query = runContext.render(this.query);
+            URI from = new URI(runContext.render(this.from));
+
+            Flowable<Integer> flowable;
+            AtomicLong count = new AtomicLong();
+
+            logger.debug("Starting query run: {}", query);
+            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.uriToInputStream(from)))) {
+                flowable = Flowable.create(FileSerde.reader(inputStream), BackpressureStrategy.BUFFER)
+                    .buffer(this.chunk, this.chunk)
+                    .map(o -> {
+                        count.incrementAndGet();
+                        Transaction tx = session.beginTransaction();
+                        Map<String, Object> params = new HashMap<>();
+                        params.put("props", o);
+                        Result result = tx.run(query, params);
+                        Integer updated = result.list().size();
+                        tx.commit();
+                        return updated;
+                    });
+                Integer updated = flowable.reduce(Integer::sum).blockingGet();
+
+//                runContext.metric(Counter.of("records", count.get()));
+//                runContext.metric(Counter.of("updated", updated == null ? 0 : updated));
+
+                logger.info("Successfully bulk {} queries with {} updated rows", count.get(), updated);
+
+                return Output
+                    .builder()
+                    .rowCount(count.get())
+                    .updatedCount(updated)
+                    .build();
+            }
+
+        }
+    }
+
+    @Builder
+    @Getter
+    public static class Output implements io.kestra.core.models.tasks.Output {
+        @Schema(title = "The count of executed queries")
+        private final Long rowCount;
+
+        @Schema(title = "The updated rows count")
+        private final Integer updatedCount;
+    }
+
+}
