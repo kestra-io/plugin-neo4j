@@ -1,10 +1,13 @@
 package io.kestra.plugin.neo4j;
 
 import com.google.common.collect.ImmutableMap;
+import io.kestra.core.models.annotations.Example;
+import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
+import io.kestra.plugin.neo4j.models.StoreType;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
@@ -32,7 +35,22 @@ import java.util.stream.StreamSupport;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Fetch rows matching the given query"
+    title = "Execute a query to a neo4j database."
+)
+@Plugin(
+    examples = {
+        @Example(
+            code = {
+                "url: \"{{url}}\"",
+                "username: \"{{username}}\"",
+                "password: \"{{password}}\"",
+                "query: |",
+                "   MATCH (p:Person)",
+                "   RETURN p",
+                "storeType: FETCH"
+            }
+        )
+    }
 )
 public class Query extends AbstractNeo4jConnection implements RunnableTask<Query.Output> {
     @Schema(
@@ -41,52 +59,43 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     @PluginProperty(dynamic = true)
     private String query;
     @Schema(
-        title = "Fetch the result"
+        title = "The way you want to store the data",
+        description = "FETCHONE output the first row"
+            + "FETCH output all the row"
+            + "STORE store all row in a file"
+            + "NONE do nothing"
     )
     @Builder.Default
-    private boolean fetch = false;
-
-    @Schema(
-        title = "Fetch one row"
-    )
-    @Builder.Default
-    private boolean fetchOne = false;
-    @Schema(
-        title = "Store to Kestra storage"
-    )
-    @Builder.Default
-    private boolean store = false;
+    private StoreType storeType = StoreType.NONE;
 
     @Override
     public Output run(RunContext runContext) throws Exception {
         try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
             Output.OutputBuilder output = Output.builder();
             Result result = session.run(runContext.render(query));
-            if (fetch || fetchOne || store) {
-                if (store) {
+            switch (storeType) {
+                case STORE:
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
 //                    runContext.metric(Counter.of("store.size", store.getValue()));
                     output
                         .uri(store.getKey())
                         .size(store.getValue().intValue());
-                } else if (fetch || fetchOne) {
-                    List<Map<String, Object>> fetchedResult = result.stream()
-                        .map(Record::values)
-                        .flatMap(Collection::stream)
-                        .map(Value::asMap)
-                        .collect(Collectors.toList());
-                    if (fetch) {
-                        output.rows(fetchedResult);
-                        output.size(fetchedResult.size());
-//                        runContext.metric(Counter.of("store.size", fetchedResult.size()));
-                    } else {
-                        output.row(fetchedResult.size() > 0 ? fetchedResult.get(0) : ImmutableMap.of());
-                        output.size(1);
-//                        runContext.metric(Counter.of("fetch.size", 1));
-                    }
+                    break;
+                case FETCH: {
+                    List<Map<String, Object>> fetchedResult = this.fetchResult(result);
+                    output.rows(fetchedResult);
+                    output.size(fetchedResult.size());
+//                    runContext.metric(Counter.of("store.size", fetchedResult.size()));
+                    break;
+                }
+                case FETCHONE: {
+                    List<Map<String, Object>> fetchedResult = this.fetchResult(result);
+                    output.row(fetchedResult.size() > 0 ? fetchedResult.get(0) : ImmutableMap.of());
+                    output.size(1);
+//                    runContext.metric(Counter.of("fetch.size", 1));
+                    break;
                 }
             }
-
             return output.build();
         }
     }
@@ -107,7 +116,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         private Map<String, Object> row;
 
         @Schema(
-            title = "The uri of store result",
+            title = "The uri of the stored result",
             description = "Only populated if 'store' is set to true."
         )
         private URI uri;
@@ -154,6 +163,14 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                 lineCount
             );
         }
+    }
+
+    private List<Map<String, Object>> fetchResult(Result result) {
+        return result.stream()
+            .map(Record::values)
+            .flatMap(Collection::stream)
+            .map(Value::asMap)
+            .collect(Collectors.toList());
     }
 
 }

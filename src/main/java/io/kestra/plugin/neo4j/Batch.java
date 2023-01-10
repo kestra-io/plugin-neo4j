@@ -1,5 +1,7 @@
 package io.kestra.plugin.neo4j;
 
+import io.kestra.core.models.annotations.Example;
+import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
@@ -28,9 +30,27 @@ import java.util.concurrent.atomic.AtomicLong;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Execute a batch query to a Neo4j database"
+    title = "Execute a batch query to a Neo4j database."
 )
-public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch.Output> {
+@Plugin(
+    examples = {
+        @Example(
+            code = {
+                "url: \"{{url}}\"",
+                "username: \"{{username}}\"",
+                "password: \"{{password}}\"",
+                "query: |",
+                "   UNWIND $props AS properties",
+                "   MERGE (y:Year {year: properties.year})",
+                "   MERGE (y)<-[:IN]-(e:Event {id: properties.id})\n",
+                "   RETURN e.id AS x ORDER BY x\n",
+                "from: {{ outputs.preivous-task-id.uri }}",
+                "chunk: 1000"
+            }
+        )
+    }
+)
+public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch.Output>, Neo4jConnectionInterface {
     @NotNull
     @Schema(
         title = "Source file URI"
@@ -40,11 +60,10 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
     @NotNull
     @Schema(
-        title = "Insert query to be executed",
-        description = "The query must have as much question mark as column in the files." +
-            "\nExample: 'insert into database values( ? , ? , ? )' for 3 columns" +
-            "\nIn case you do not want all columns, you need to precise it in the query and in the columns property" +
-            "\nExample: 'insert into(id,name) database values( ? , ? )' to select 2 columns"
+        title = "Query to execute batch, must use UNWIND",
+        description = "The query must have the row :"
+            + "\n\"UNWIND $props AS X\" with $props the variable where"
+            + "\n we input the source data for the batch."
     )
     @PluginProperty(dynamic = true)
     private String query;
@@ -67,21 +86,21 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
             String query = runContext.render(this.query);
             URI from = new URI(runContext.render(this.from));
 
-            Flowable<Integer> flowable;
-            AtomicLong count = new AtomicLong();
+            Transaction tx = session.beginTransaction();
 
             logger.debug("Starting query run: {}", query);
             try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.uriToInputStream(from)))) {
+                Flowable<Integer> flowable;
+                AtomicLong count = new AtomicLong();
+
                 flowable = Flowable.create(FileSerde.reader(inputStream), BackpressureStrategy.BUFFER)
                     .buffer(this.chunk, this.chunk)
                     .map(o -> {
-                        count.incrementAndGet();
-                        Transaction tx = session.beginTransaction();
                         Map<String, Object> params = new HashMap<>();
                         params.put("props", o);
                         Result result = tx.run(query, params);
                         Integer updated = result.list().size();
-                        tx.commit();
+                        count.incrementAndGet();
                         return updated;
                     });
                 Integer updated = flowable.reduce(Integer::sum).blockingGet();
@@ -91,13 +110,17 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
                 logger.info("Successfully bulk {} queries with {} updated rows", count.get(), updated);
 
+                tx.commit();
+
                 return Output
                     .builder()
                     .rowCount(count.get())
                     .updatedCount(updated)
                     .build();
+            } catch (Exception e) {
+                tx.rollback();
+                throw e;
             }
-
         }
     }
 

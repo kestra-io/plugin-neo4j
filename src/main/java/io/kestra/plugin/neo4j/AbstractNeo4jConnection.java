@@ -30,8 +30,7 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     @PluginProperty(dynamic = true)
     private String password;
     @Schema(
-            title = "Short description for this input",
-            description = "Full description of this input"
+            title = "Token base64 encoded token"
     )
     @PluginProperty(dynamic = true)
     private String bearerToken;

@@ -3,6 +3,7 @@ package io.kestra.plugin.neo4j;
 import com.google.common.collect.ImmutableMap;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.plugin.neo4j.models.StoreType;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,7 +39,7 @@ class QueryTest {
 
     static String query() {
         return "MATCH (p:Person) \n" +
-                "RETURN p";
+            "RETURN p";
 
     }
 
@@ -51,13 +52,13 @@ class QueryTest {
         String boltUrl = neo4jContainer.getBoltUrl();
         try (Driver driver = GraphDatabase.driver(boltUrl, AuthTokens.basic("neo4j", neo4jContainer.getAdminPassword())); Session session = driver.session()) {
             session.run("CREATE (p:Person {" +
-                    "name: 'aDeveloper', " +
-                    "friends: ['otherDevelopers', 'PO', 'otherQas']" +
-                    "})");
+                "name: 'aDeveloper', " +
+                "friends: ['otherDevelopers', 'PO', 'otherQas']" +
+                "})");
             session.run("CREATE (p:Person {" +
-                    "name: 'aQa', " +
-                    "friends: ['otherQas', 'otherDevelopers']" +
-                    "})");
+                "name: 'aQa', " +
+                "friends: ['otherQas', 'otherDevelopers']" +
+                "})");
         } catch (Exception e) {
             fail(e.getMessage());
         }
@@ -81,7 +82,7 @@ class QueryTest {
             .url("{{url}}")
             .username("{{username}}")
             .password("{{password}}")
-            .fetch(true)
+            .storeType(StoreType.FETCH)
             .build();
 
         Query.Output run = query.run(runContext);
@@ -94,6 +95,7 @@ class QueryTest {
         assertThat(rows.get(1).get("name"), is("aQa"));
         assertThat((List<String>) rows.get(1).get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
     }
+
     @Test
     @SuppressWarnings("unchecked")
     void fetchOne() throws Exception {
@@ -112,7 +114,7 @@ class QueryTest {
             .url("{{url}}")
             .username("{{username}}")
             .password("{{password}}")
-            .fetchOne(true)
+            .storeType(StoreType.FETCHONE)
             .build();
 
         Query.Output run = query.run(runContext);
@@ -122,6 +124,7 @@ class QueryTest {
         assertThat(row.get("name"), is("aDeveloper"));
         assertThat((List<String>) row.get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
     }
+
     @Test
     @SuppressWarnings("unchecked")
     void store() throws Exception {
@@ -140,7 +143,7 @@ class QueryTest {
             .url("{{url}}")
             .username("{{username}}")
             .password("{{password}}")
-            .store(true)
+            .storeType(StoreType.STORE)
             .build();
 
         Query.Output run = query.run(runContext);
