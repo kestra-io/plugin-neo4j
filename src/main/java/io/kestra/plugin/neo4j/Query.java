@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
@@ -12,11 +13,14 @@ import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.*;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import org.neo4j.driver.Record;
-import org.neo4j.driver.Value;
 import org.neo4j.driver.*;
+import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -70,32 +74,39 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
     @Override
     public Output run(RunContext runContext) throws Exception {
+        Logger logger = runContext.logger();
+
         try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
             Output.OutputBuilder output = Output.builder();
-            Result result = session.run(runContext.render(query));
+
+            String render = runContext.render(query);
+            logger.warn("Starting query: {}", render);
+            Result result = session.run(render);
+
             switch (storeType) {
                 case STORE:
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
-//                    runContext.metric(Counter.of("store.size", store.getValue()));
+                    runContext.metric(Counter.of("store.size", store.getValue()));
                     output
                         .uri(store.getKey())
-                        .size(store.getValue().intValue());
+                        .size(store.getValue());
                     break;
                 case FETCH: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
                     output.rows(fetchedResult);
-                    output.size(fetchedResult.size());
-//                    runContext.metric(Counter.of("store.size", fetchedResult.size()));
+                    output.size((long) fetchedResult.size());
+                    runContext.metric(Counter.of("store.size", fetchedResult.size()));
                     break;
                 }
                 case FETCHONE: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
                     output.row(fetchedResult.size() > 0 ? fetchedResult.get(0) : ImmutableMap.of());
-                    output.size(1);
-//                    runContext.metric(Counter.of("fetch.size", 1));
+                    output.size((long) fetchedResult.size());
+                    runContext.metric(Counter.of("fetch.size", fetchedResult.size()));
                     break;
                 }
             }
+
             return output.build();
         }
     }
@@ -105,26 +116,26 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
             title = "List containing the fetched data",
-            description = "Only populated if 'fetch' parameter is set to true."
+            description = "Only populated if using `FETCH`."
         )
         private List<Map<String, Object>> rows;
 
         @Schema(
             title = "Map containing the first row of fetched data",
-            description = "Only populated if 'fetchOne' parameter is set to true."
+            description = "Only populated if using `FETCHONE`."
         )
         private Map<String, Object> row;
 
         @Schema(
             title = "The uri of the stored result",
-            description = "Only populated if 'store' is set to true."
+            description = "Only populated if using `STORE`"
         )
         private URI uri;
 
         @Schema(
-            title = "The size of the rows fetch"
+            title = "The count of the rows fetch"
         )
-        private Integer size;
+        private Long size;
     }
 
     private Map.Entry<URI, Long> storeResult(Result result, RunContext runContext) throws IOException {
@@ -138,13 +149,15 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                 .create(
                     s -> {
                         StreamSupport
-                            .stream(result.stream()
-                                .map(Record::values)
-                                .flatMap(Collection::stream)
-                                .map(Value::asMap).spliterator(), false)
-                            .forEach(fieldValues -> {
-                                s.onNext(fieldValues);
-                            });
+                            .stream(
+                                result
+                                    .stream()
+                                    .map(Record::values)
+                                    .flatMap(Collection::stream)
+                                    .map(Value::asMap).spliterator(),
+                                false
+                            )
+                            .forEach(s::onNext);
 
                         s.onComplete();
                     },
@@ -172,5 +185,4 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             .map(Value::asMap)
             .collect(Collectors.toList());
     }
-
 }
