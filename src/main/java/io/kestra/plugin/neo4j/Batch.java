@@ -45,7 +45,7 @@ import javax.validation.constraints.NotNull;
                 "   MERGE (y:Year {year: properties.year})",
                 "   MERGE (y)<-[:IN]-(e:Event {id: properties.id})\n",
                 "   RETURN e.id AS x ORDER BY x\n",
-                "from: {{ outputs.preivous-task-id.uri }}",
+                "from: {{ outputs['previous-task-id'].uri }}",
                 "chunk: 1000"
             }
         )
