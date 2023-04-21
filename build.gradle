@@ -117,7 +117,8 @@ nexusPublishing {
 jar {
     manifest {
         attributes(
-                "X-Kestra-Title": project.name,
+                "X-Kestra-Name": project.name,
+                "X-Kestra-Title": "Neo4j",
                 "X-Kestra-Group": project.group + ".neo4j",
                 "X-Kestra-Description": project.description,
                 "X-Kestra-Version": project.version
