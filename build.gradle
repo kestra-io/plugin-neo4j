@@ -20,11 +20,11 @@ repositories {
     }
 }
 
-sourceCompatibility = 11
-targetCompatibility = 11
+sourceCompatibility = 17
+targetCompatibility = 17
 
 group "io.kestra.plugin"
-description 'Neo4J plugin for Kestra'
+description 'Connect and interact with Neo4j graph databases in Kestra pipelines.'
 
 tasks.withType(JavaCompile) {
     options.encoding = "UTF-8"
