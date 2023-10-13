@@ -77,6 +77,6 @@ public class BatchTest {
             n1.put("position", UUID.randomUUID().toString());
             FileSerde.write(output, n1);
         }
-        return storageInterface.put(URI.create("/" + IdUtils.create() + ".ion"), new FileInputStream(tempFile));
+        return storageInterface.put(null, URI.create("/" + IdUtils.create() + ".ion"), new FileInputStream(tempFile));
     }
 }
