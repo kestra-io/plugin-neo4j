@@ -7,8 +7,6 @@ import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
-import io.reactivex.BackpressureStrategy;
-import io.reactivex.Flowable;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -25,6 +23,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.validation.constraints.NotNull;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 
 @SuperBuilder
 @ToString
@@ -88,10 +88,10 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
             logger.debug("Starting query: {}", query);
 
             try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.uriToInputStream(from)))) {
-                Flowable<Integer> flowable;
+                Flux<Integer> flowable;
                 AtomicLong count = new AtomicLong();
 
-                flowable = Flowable.create(FileSerde.reader(inputStream), BackpressureStrategy.BUFFER)
+                flowable = Flux.create(FileSerde.reader(inputStream), FluxSink.OverflowStrategy.BUFFER)
                     .buffer(this.chunk, this.chunk)
                     .map(o -> {
                         Map<String, Object> params = new HashMap<>();
@@ -103,7 +103,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
                         return updated;
                     });
 
-                Integer updated = flowable.reduce(Integer::sum).blockingGet();
+                Integer updated = flowable.reduce(Integer::sum).block();
 
                 runContext.metric(Counter.of("records", count.get()));
                 runContext.metric(Counter.of("updated", updated == null ? 0 : updated));
