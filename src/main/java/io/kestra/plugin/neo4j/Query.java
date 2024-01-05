@@ -9,9 +9,6 @@ import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.plugin.neo4j.models.StoreType;
-import io.reactivex.BackpressureStrategy;
-import io.reactivex.Flowable;
-import io.reactivex.Single;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -21,6 +18,9 @@ import lombok.experimental.SuperBuilder;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.*;
 import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import static io.kestra.core.utils.Rethrow.throwConsumer;
 
 @SuperBuilder
 @ToString
@@ -145,7 +147,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         try (
             OutputStream output = new FileOutputStream(tempFile)
         ) {
-            Flowable<Object> flowable = Flowable
+            Flux<Object> flowable = Flux
                 .create(
                     s -> {
                         StreamSupport
@@ -157,17 +159,17 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                                     .map(Value::asMap).spliterator(),
                                 false
                             )
-                            .forEach(s::onNext);
+                            .forEach(s::next);
 
-                        s.onComplete();
+                        s.complete();
                     },
-                    BackpressureStrategy.BUFFER
+                    FluxSink.OverflowStrategy.BUFFER
                 )
-                .doOnNext(row -> FileSerde.write(output, row));
+                .doOnNext(throwConsumer(row -> FileSerde.write(output, row)));
 
             // metrics & finalize
-            Single<Long> count = flowable.count();
-            Long lineCount = count.blockingGet();
+            Mono<Long> count = flowable.count();
+            Long lineCount = count.block();
 
             output.flush();
 
