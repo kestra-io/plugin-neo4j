@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import org.neo4j.driver.Record;
@@ -36,6 +37,7 @@ import java.util.stream.StreamSupport;
 
 import static io.kestra.core.utils.Rethrow.throwConsumer;
 
+@NoArgsConstructor
 @SuperBuilder
 @ToString
 @EqualsAndHashCode
