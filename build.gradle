@@ -91,9 +91,9 @@ dependencies {
     testImplementation "org.hamcrest:hamcrest:2.2"
     testImplementation "org.hamcrest:hamcrest-library:2.2"
 
-    testImplementation "org.testcontainers:testcontainers:1.19.6"
-    testImplementation "org.testcontainers:junit-jupiter:1.19.6"
-    testImplementation "org.testcontainers:neo4j:1.19.6"
+    testImplementation "org.testcontainers:testcontainers:1.19.7"
+    testImplementation "org.testcontainers:junit-jupiter:1.19.7"
+    testImplementation "org.testcontainers:neo4j:1.19.7"
 }
 
 /**********************************************************************************************************************\
