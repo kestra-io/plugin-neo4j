@@ -89,7 +89,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
             logger.debug("Starting query: {}", query);
 
-            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.uriToInputStream(from)))) {
+            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.storage().getFile(from)))) {
                 Flux<Integer> flowable;
                 AtomicLong count = new AtomicLong();
 

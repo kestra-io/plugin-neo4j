@@ -176,7 +176,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             output.flush();
 
             return new AbstractMap.SimpleEntry<>(
-                runContext.putTempFile(tempFile),
+                runContext.storage().putFile(tempFile),
                 lineCount
             );
         }
