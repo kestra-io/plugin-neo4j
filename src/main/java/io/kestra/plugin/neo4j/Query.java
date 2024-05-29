@@ -66,6 +66,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     )
     @PluginProperty(dynamic = true)
     private String query;
+
     @Schema(
         title = "The way you want to store the data",
         description = "FETCHONE output the first row"
@@ -74,6 +75,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             + "NONE do nothing"
     )
     @Builder.Default
+    @PluginProperty
     private StoreType storeType = StoreType.NONE;
 
     @Override
