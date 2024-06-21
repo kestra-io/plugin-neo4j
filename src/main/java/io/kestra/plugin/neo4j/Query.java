@@ -146,7 +146,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
     private Map.Entry<URI, Long> storeResult(Result result, RunContext runContext) throws IOException {
         // temp file
-        File tempFile = runContext.tempFile(".ion").toFile();
+        File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
 
         try (
             OutputStream output = new FileOutputStream(tempFile)

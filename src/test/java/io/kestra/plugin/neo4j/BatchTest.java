@@ -69,7 +69,7 @@ public class BatchTest {
     URI createTestFile() throws Exception {
         RunContext runContext = runContextFactory.of(ImmutableMap.of());
 
-        File tempFile = runContext.tempFile(".ion").toFile();
+        File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
         OutputStream output = new FileOutputStream(tempFile);
         for (int i = 0; i < 25000; i++) {
             Map<String, Object> n1 = new HashMap<>();
