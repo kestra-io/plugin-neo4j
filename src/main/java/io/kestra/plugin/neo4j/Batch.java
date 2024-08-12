@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.validation.constraints.NotNull;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -89,11 +88,11 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
             logger.debug("Starting query: {}", query);
 
-            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.storage().getFile(from)))) {
+            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.storage().getFile(from)), FileSerde.BUFFER_SIZE)) {
                 Flux<Integer> flowable;
                 AtomicLong count = new AtomicLong();
 
-                flowable = Flux.create(FileSerde.reader(inputStream), FluxSink.OverflowStrategy.BUFFER)
+                flowable = FileSerde.readAll(inputStream)
                     .buffer(this.chunk, this.chunk)
                     .map(o -> {
                         Map<String, Object> params = new HashMap<>();
