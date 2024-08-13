@@ -23,10 +23,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URI;
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -34,8 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import static io.kestra.core.utils.Rethrow.throwConsumer;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -149,7 +144,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
 
         try (
-            OutputStream output = new FileOutputStream(tempFile)
+            var output = new BufferedWriter(new FileWriter(tempFile), FileSerde.BUFFER_SIZE)
         ) {
             Flux<Object> flowable = Flux
                 .create(
@@ -168,11 +163,11 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                         s.complete();
                     },
                     FluxSink.OverflowStrategy.BUFFER
-                )
-                .doOnNext(throwConsumer(row -> FileSerde.write(output, row)));
+                );
+
+            Mono<Long> count = FileSerde.writeAll(output, flowable);
 
             // metrics & finalize
-            Mono<Long> count = flowable.count();
             Long lineCount = count.block();
 
             output.flush();
