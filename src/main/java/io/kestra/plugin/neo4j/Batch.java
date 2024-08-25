@@ -37,18 +37,25 @@ import reactor.core.publisher.Flux;
 @Plugin(
     examples = {
         @Example(
-            code = {
-                "url: \"{{url}}\"",
-                "username: \"{{username}}\"",
-                "password: \"{{password}}\"",
-                "query: |",
-                "   UNWIND $props AS properties",
-                "   MERGE (y:Year {year: properties.year})",
-                "   MERGE (y)<-[:IN]-(e:Event {id: properties.id})\n",
-                "   RETURN e.id AS x ORDER BY x\n",
-                "from: \"{{ outputs['previous-task-id'].uri }}\"",
-                "chunk: 1000"
-            }
+            full = true,
+            code = """
+                id: neo4j_batch
+                namespace: company.team
+
+                tasks:
+                  - id: batch
+                    type: io.kestra.plugin.neo4j.Batch
+                    url: "{{ url }}"
+                    username: "{{ username }}"
+                    password: "{{ password }}"
+                    query: |
+                       UNWIND $props AS properties
+                       MERGE (y:Year {year: properties.year})
+                       MERGE (y)<-[:IN]-(e:Event {id: properties.id})\n
+                       RETURN e.id AS x ORDER BY x\n
+                    from: "{{ outputs.previous_task_id.uri }}"
+                    chunk: 1000
+                """
         )
     }
 )
