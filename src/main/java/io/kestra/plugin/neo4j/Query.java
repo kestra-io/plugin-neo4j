@@ -38,26 +38,33 @@ import java.util.stream.StreamSupport;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Execute a query to a neo4j database."
+    title = "Execute a query on a neo4j database."
 )
 @Plugin(
     examples = {
         @Example(
-            code = {
-                "url: \"{{url}}\"",
-                "username: \"{{username}}\"",
-                "password: \"{{password}}\"",
-                "query: |",
-                "   MATCH (p:Person)",
-                "   RETURN p",
-                "storeType: FETCH"
-            }
+            full = true,
+            code = """
+                id: neo4j_query
+                namespace: company.team
+
+                tasks:
+                  - id: query
+                    type: io.kestra.plugin.neo4j.Query
+                    url: "{{ url }}"
+                    username: "{{ username }}"
+                    password: "{{ password }}"
+                    query: |
+                        MATCH (p:Person)
+                        RETURN p
+                    storeType: FETCH
+            """
         )
     }
 )
 public class Query extends AbstractNeo4jConnection implements RunnableTask<Query.Output> {
     @Schema(
-        title = "The Neo4J query to perform"
+        title = "The Neo4J query to perform."
     )
     @PluginProperty(dynamic = true)
     private String query;
