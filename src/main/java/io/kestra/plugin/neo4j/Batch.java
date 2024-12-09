@@ -2,20 +2,18 @@ package io.kestra.plugin.neo4j;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.executions.metrics.Counter;
+import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.neo4j.driver.*;
 import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -23,8 +21,6 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import jakarta.validation.constraints.NotNull;
-import reactor.core.publisher.Flux;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -64,8 +60,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
     @Schema(
         title = "Source file URI"
     )
-    @PluginProperty(dynamic = true)
-    private String from;
+    private Property<String> from;
 
     @NotNull
     @Schema(
@@ -74,23 +69,21 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
             + "\n\"UNWIND $props AS X\" with $props the variable where"
             + "\n we input the source data for the batch."
     )
-    @PluginProperty(dynamic = true)
-    private String query;
+    private Property<String> query;
 
     @Schema(
         title = "The size of chunk for every bulk request"
     )
-    @PluginProperty(dynamic = true)
     @Builder.Default
     @NotNull
-    private Integer chunk = 1000;
+    private Property<Integer> chunk = Property.of(1000);
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
+        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext)); Session session = driver.session()) {
             Logger logger = runContext.logger();
-            String query = runContext.render(this.query);
-            URI from = new URI(runContext.render(this.from));
+            String query = runContext.render(this.query).as(String.class).orElseThrow();
+            URI from = new URI(runContext.render(this.from).as(String.class).orElseThrow());
             Transaction tx = session.beginTransaction();
 
             logger.debug("Starting query: {}", query);
@@ -99,8 +92,9 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
                 Flux<Integer> flowable;
                 AtomicLong count = new AtomicLong();
 
+                var chunkValue = runContext.render(this.chunk).as(Integer.class).orElseThrow();
                 flowable = FileSerde.readAll(inputStream)
-                    .buffer(this.chunk, this.chunk)
+                    .buffer(chunkValue, chunkValue)
                     .map(o -> {
                         Map<String, Object> params = new HashMap<>();
                         params.put("props", o);

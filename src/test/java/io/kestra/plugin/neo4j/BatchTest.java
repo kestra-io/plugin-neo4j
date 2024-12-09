@@ -1,13 +1,14 @@
 package io.kestra.plugin.neo4j;
 
 import com.google.common.collect.ImmutableMap;
+import io.kestra.core.junit.annotations.KestraTest;
+import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
-import io.kestra.core.junit.annotations.KestraTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -52,11 +53,11 @@ public class BatchTest {
         Batch batch = Batch.builder()
             .id(IdUtils.create())
             .type(Batch.class.getName())
-            .query(query())
-            .url(neo4jContainer.getBoltUrl())
-            .username("neo4j")
-            .password(neo4jContainer.getAdminPassword())
-            .from(createTestFile().toString())
+            .query(Property.of(query()))
+            .url(Property.of(neo4jContainer.getBoltUrl()))
+            .username(Property.of("neo4j"))
+            .password(Property.of(neo4jContainer.getAdminPassword()))
+            .from(Property.of(createTestFile().toString()))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, batch, ImmutableMap.of());

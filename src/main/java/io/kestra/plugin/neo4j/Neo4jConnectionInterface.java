@@ -1,5 +1,6 @@
 package io.kestra.plugin.neo4j;
 
+import io.kestra.core.models.property.Property;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 public interface Neo4jConnectionInterface {
@@ -7,5 +8,5 @@ public interface Neo4jConnectionInterface {
         title = "The URL to a Neo4j instance",
         description = "The URL can either be in HTTP or Bolt format"
     )
-    String getUrl();
+    Property<String> getUrl();
 }
