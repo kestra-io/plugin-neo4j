@@ -82,7 +82,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
+        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext)); Session session = driver.session()) {
             Output.OutputBuilder output = Output.builder();
 
             String render = runContext.render(query).as(String.class).orElse(null);
