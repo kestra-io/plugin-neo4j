@@ -1,12 +1,13 @@
 package io.kestra.plugin.neo4j;
 
 import com.google.common.collect.ImmutableMap;
+import io.kestra.core.junit.annotations.KestraTest;
+import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.neo4j.models.StoreType;
-import io.kestra.core.junit.annotations.KestraTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -69,11 +70,11 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(query())
-            .url(neo4jContainer.getBoltUrl())
-            .username("neo4j")
-            .password(neo4jContainer.getAdminPassword())
-            .storeType(StoreType.FETCH)
+            .query(Property.of(query()))
+            .url(Property.of(neo4jContainer.getBoltUrl()))
+            .username(Property.of("neo4j"))
+            .password(Property.of(neo4jContainer.getAdminPassword()))
+            .storeType(Property.of(StoreType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -92,13 +93,13 @@ class QueryTest {
     @SuppressWarnings("unchecked")
     void fetchOne() throws Exception {
         Query query = Query.builder()
-            .query(query())
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .url(neo4jContainer.getBoltUrl())
-            .username("neo4j")
-            .password(neo4jContainer.getAdminPassword())
-            .storeType(StoreType.FETCHONE)
+            .query(Property.of(query()))
+            .url(Property.of(neo4jContainer.getBoltUrl()))
+            .username(Property.of("neo4j"))
+            .password(Property.of(neo4jContainer.getAdminPassword()))
+            .storeType(Property.of(StoreType.FETCHONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -115,11 +116,11 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(query())
-            .url(neo4jContainer.getBoltUrl())
-            .username("neo4j")
-            .password(neo4jContainer.getAdminPassword())
-            .storeType(StoreType.STORE)
+            .query(Property.of(query()))
+            .url(Property.of(neo4jContainer.getBoltUrl()))
+            .username(Property.of("neo4j"))
+            .password(Property.of(neo4jContainer.getAdminPassword()))
+            .storeType(Property.of(StoreType.STORE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -133,12 +134,12 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query("MATCH p:Invalid \n" +
-                "RETURN p")
-            .url(neo4jContainer.getBoltUrl())
-            .username("neo4j")
-            .password(neo4jContainer.getAdminPassword())
-            .storeType(StoreType.FETCH)
+            .query(Property.of("MATCH p:Invalid \n" +
+                "RETURN p"))
+            .url(Property.of(neo4jContainer.getBoltUrl()))
+            .username(Property.of("neo4j"))
+            .password(Property.of(neo4jContainer.getAdminPassword()))
+            .storeType(Property.of(StoreType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());

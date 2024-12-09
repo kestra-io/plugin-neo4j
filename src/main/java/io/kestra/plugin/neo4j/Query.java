@@ -3,27 +3,27 @@ package io.kestra.plugin.neo4j;
 import com.google.common.collect.ImmutableMap;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.executions.metrics.Counter;
+import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.plugin.neo4j.models.StoreType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.neo4j.driver.Record;
+import org.neo4j.driver.Value;
 import org.neo4j.driver.*;
 import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URI;
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -66,8 +66,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     @Schema(
         title = "The Neo4J query to perform."
     )
-    @PluginProperty(dynamic = true)
-    private String query;
+    private Property<String> query;
 
     @Schema(
         title = "The way you want to store the data",
@@ -77,8 +76,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             + "NONE do nothing"
     )
     @Builder.Default
-    @PluginProperty
-    private StoreType storeType = StoreType.NONE;
+    private Property<StoreType> storeType = Property.of(StoreType.NONE);
 
     @Override
     public Output run(RunContext runContext) throws Exception {
@@ -87,11 +85,11 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()), this.credentials(runContext)); Session session = driver.session()) {
             Output.OutputBuilder output = Output.builder();
 
-            String render = runContext.render(query);
+            String render = runContext.render(query).as(String.class).orElse(null);
             logger.warn("Starting query: {}", render);
             Result result = session.run(render);
 
-            switch (storeType) {
+            switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
                 case STORE:
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));
