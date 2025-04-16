@@ -38,7 +38,7 @@ import java.util.stream.StreamSupport;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Execute a query on a neo4j database."
+    title = "Query a Neo4j database."
 )
 @Plugin(
     examples = {
