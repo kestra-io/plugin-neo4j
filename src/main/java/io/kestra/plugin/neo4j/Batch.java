@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Execute a batch query to a Neo4j database."
+    title = "Run a Neo4j batch-query."
 )
 @Plugin(
     examples = {
