@@ -58,7 +58,7 @@ import java.util.stream.StreamSupport;
                         MATCH (p:Person)
                         RETURN p
                     storeType: FETCH
-            """
+                """
         )
     }
 )
