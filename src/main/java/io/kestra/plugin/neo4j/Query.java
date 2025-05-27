@@ -12,9 +12,9 @@ import io.kestra.plugin.neo4j.models.StoreType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
+import org.neo4j.driver.*;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Value;
-import org.neo4j.driver.*;
 import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -76,7 +76,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             + "NONE do nothing"
     )
     @Builder.Default
-    private Property<StoreType> storeType = Property.of(StoreType.NONE);
+    private Property<StoreType> storeType = Property.ofValue(StoreType.NONE);
 
     @Override
     public Output run(RunContext runContext) throws Exception {
@@ -90,23 +90,24 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             Result result = session.run(render);
 
             switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
-                case STORE:
+                case STORE: {
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));
                     output
                         .uri(store.getKey())
                         .size(store.getValue());
                     break;
+                    }
                 case FETCH: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
                     output.rows(fetchedResult);
                     output.size((long) fetchedResult.size());
-                    runContext.metric(Counter.of("store.size", fetchedResult.size()));
+                    runContext.metric(Counter.of("fetch.size", fetchedResult.size()));
                     break;
                 }
                 case FETCHONE: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
-                    output.row(fetchedResult.size() > 0 ? fetchedResult.get(0) : ImmutableMap.of());
+                    output.row(!fetchedResult.isEmpty() ? fetchedResult.getFirst() : ImmutableMap.of());
                     output.size((long) fetchedResult.size());
                     runContext.metric(Counter.of("fetch.size", fetchedResult.size()));
                     break;

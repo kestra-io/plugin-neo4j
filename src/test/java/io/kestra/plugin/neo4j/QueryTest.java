@@ -70,11 +70,11 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.of(query()))
-            .url(Property.of(neo4jContainer.getBoltUrl()))
-            .username(Property.of("neo4j"))
-            .password(Property.of(neo4jContainer.getAdminPassword()))
-            .storeType(Property.of(StoreType.FETCH))
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -95,11 +95,11 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.of(query()))
-            .url(Property.of(neo4jContainer.getBoltUrl()))
-            .username(Property.of("neo4j"))
-            .password(Property.of(neo4jContainer.getAdminPassword()))
-            .storeType(Property.of(StoreType.FETCHONE))
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCHONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -116,11 +116,11 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.of(query()))
-            .url(Property.of(neo4jContainer.getBoltUrl()))
-            .username(Property.of("neo4j"))
-            .password(Property.of(neo4jContainer.getAdminPassword()))
-            .storeType(Property.of(StoreType.STORE))
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.STORE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -134,12 +134,12 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.of("MATCH p:Invalid \n" +
+            .query(Property.ofValue("MATCH p:Invalid \n" +
                 "RETURN p"))
-            .url(Property.of(neo4jContainer.getBoltUrl()))
-            .username(Property.of("neo4j"))
-            .password(Property.of(neo4jContainer.getAdminPassword()))
-            .storeType(Property.of(StoreType.FETCH))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());

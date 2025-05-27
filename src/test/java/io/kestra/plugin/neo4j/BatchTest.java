@@ -54,11 +54,11 @@ public class BatchTest {
         Batch batch = Batch.builder()
             .id(IdUtils.create())
             .type(Batch.class.getName())
-            .query(Property.of(query()))
-            .url(Property.of(neo4jContainer.getBoltUrl()))
-            .username(Property.of("neo4j"))
-            .password(Property.of(neo4jContainer.getAdminPassword()))
-            .from(Property.of(createTestFile().toString()))
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .from(Property.ofValue(createTestFile().toString()))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, batch, ImmutableMap.of());
