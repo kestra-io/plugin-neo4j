@@ -78,7 +78,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
     )
     @Builder.Default
     @NotNull
-    private Property<Integer> chunk = Property.of(1000);
+    private Property<Integer> chunk = Property.ofValue(1000);
 
     @Override
     public Output run(RunContext runContext) throws Exception {
