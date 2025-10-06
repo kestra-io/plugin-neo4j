@@ -49,7 +49,7 @@ dependencies {
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
 
     // neo4j driver
-    api 'org.neo4j.driver:neo4j-java-driver:5.28.9'
+    api 'org.neo4j.driver:neo4j-java-driver:6.0.1'
 }
 
 
