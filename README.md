@@ -4,7 +4,7 @@
   <img width="460" src="https://kestra.io/logo.svg"  alt="Kestra workflow orchestrator" />
 </p>
 
-> Plugin to interract with Neo4j
+> Plugin to interact with Neo4j
 
 ![Kestra orchestrator](https://kestra.io/ui.gif)
 
