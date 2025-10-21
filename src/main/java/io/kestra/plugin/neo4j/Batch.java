@@ -122,8 +122,8 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
                 Integer updated = flowable.reduce(Integer::sum).block();
 
-                runContext.metric(Counter.of("records.processed", count.get()));
-                runContext.metric(Counter.of("records.updated", updated == null ? 0 : updated));
+                runContext.metric(Counter.of("records.processed", count.get(), "origin", "Batch"));
+                runContext.metric(Counter.of("records.updated", updated == null ? 0 : updated, "origin", "Batch"));
 
                 logger.info("Successfully bulk {} queries with {} updated rows", count.get(), updated);
 
