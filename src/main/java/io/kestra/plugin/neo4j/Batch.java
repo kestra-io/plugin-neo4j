@@ -3,6 +3,7 @@ package io.kestra.plugin.neo4j;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.annotations.Metric;
 import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
@@ -53,6 +54,18 @@ import java.util.concurrent.atomic.AtomicLong;
                     from: "{{ outputs.previous_task_id.uri }}"
                     chunk: 1000
                 """
+        )
+    },
+    metrics = {
+        @Metric(
+            name = "records.processed",
+            type = Counter.TYPE,
+            description = "The total number of records processed in the batch."
+        ),
+        @Metric(
+            name = "records.updated",
+            type = Counter.TYPE,
+            description = "The total number of records updated in the batch."
         )
     }
 )
@@ -109,8 +122,8 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
                 Integer updated = flowable.reduce(Integer::sum).block();
 
-                runContext.metric(Counter.of("records", count.get()));
-                runContext.metric(Counter.of("updated", updated == null ? 0 : updated));
+                runContext.metric(Counter.of("records.processed", count.get()));
+                runContext.metric(Counter.of("records.updated", updated == null ? 0 : updated));
 
                 logger.info("Successfully bulk {} queries with {} updated rows", count.get(), updated);
 
