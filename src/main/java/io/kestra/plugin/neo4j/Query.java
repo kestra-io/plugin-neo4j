@@ -3,6 +3,7 @@ package io.kestra.plugin.neo4j;
 import com.google.common.collect.ImmutableMap;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.Metric;
 import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
@@ -59,6 +60,18 @@ import java.util.stream.StreamSupport;
                         RETURN p
                     storeType: FETCH
                 """
+        )
+    },
+    metrics = {
+        @Metric(
+            name = "store.size",
+            type = Counter.TYPE,
+            description = "The number of records stored in STORE mode."
+        ),
+        @Metric(
+            name = "fetch.size",
+            type = Counter.TYPE,
+            description = "The number of records fetched in FETCH or FETCHONE mode."
         )
     }
 )
