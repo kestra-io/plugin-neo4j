@@ -1,0 +1,8 @@
+group: io.kestra.plugin.neo4j
+name: "neo4j"
+title: "Neo4j"
+description: "This sub-group of plugins contains tasks for using the Neo4j graph database."
+body: ""
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"
