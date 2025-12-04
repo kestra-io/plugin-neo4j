@@ -1,8 +1,8 @@
 group: io.kestra.plugin.neo4j
 name: "neo4j"
 title: "Neo4j"
-description: "This sub-group of plugins contains tasks for using the Neo4j graph database."
-body: ""
+description: "Tasks that run Cypher queries against Neo4j."
+body: "Provide Neo4j URI/auth credentials and Cypher statements with parameters to read or write graph data, returning query results for analytics or lineage workflows."
 videos: []
 createdBy: "Kestra Core Team"
 managedBy: "Kestra Core Team"
