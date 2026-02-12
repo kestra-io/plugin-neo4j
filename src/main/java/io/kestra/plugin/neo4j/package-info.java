@@ -1,7 +1,5 @@
 @PluginSubGroup(
-    description = "This sub-group of plugins contains tasks for using the Neo4j graph database.",
-    categories = PluginSubGroup.PluginCategory.DATABASE,
-    categories = {
+    description = "This sub-group of plugins contains tasks for using the Neo4j graph database.",categories = {
         PluginSubGroup.PluginCategory.DATA
     }
 )
