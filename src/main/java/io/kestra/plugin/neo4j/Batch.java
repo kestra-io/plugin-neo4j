@@ -30,7 +30,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Run a Neo4j batch-query."
+    title = "Run Cypher batch with UNWIND",
+    description = "Reads records from internal storage, binds them to an UNWIND Cypher statement, and executes in a single transaction using chunked batches (default 1000). Ensure the query is idempotent."
 )
 @Plugin(
     examples = {
@@ -72,22 +73,22 @@ import java.util.concurrent.atomic.AtomicLong;
 public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch.Output>, Neo4jConnectionInterface {
     @NotNull
     @Schema(
-        title = "Source file URI"
+        title = "Source file URI",
+        description = "Internal storage URI (e.g. `kestra://...`) containing JSON lines to stream into the batch."
     )
     @PluginProperty(internalStorageURI = true)
     private Property<String> from;
 
     @NotNull
     @Schema(
-        title = "Query to execute batch, must use UNWIND",
-        description = "The query must have the row :"
-            + "\n\"UNWIND $props AS X\" with $props the variable where"
-            + "\n we input the source data for the batch."
+        title = "Cypher UNWIND statement",
+        description = "Must include `UNWIND $props AS ...`; `$props` is populated from each chunk of the source file. Rendered with Flow variables before execution."
     )
     private Property<String> query;
 
     @Schema(
-        title = "The size of chunk for every bulk request"
+        title = "Chunk size per request",
+        description = "Number of records sent in each bulk call (default 1000). Lower to reduce memory use; raise to speed up large imports."
     )
     @Builder.Default
     @NotNull

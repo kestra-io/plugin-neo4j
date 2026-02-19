@@ -18,19 +18,20 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     private Property<String> url;
 
     @Schema(
-        title = "Username to use in case of basic auth",
-        description = "If not specified, won't use basic"
+        title = "Username for basic auth",
+        description = "Used with `password`; takes precedence over bearer tokens when both are set."
     )
     private Property<String> username;
 
     @Schema(
-        title = "Password to use in case of basic auth",
-        description = "If not specified, won't use basic auth"
+        title = "Password for basic auth",
+        description = "Used with `username`; ignored if credentials are absent."
     )
     private Property<String> password;
 
     @Schema(
-        title = "Token base64 encoded token"
+        title = "Bearer token",
+        description = "Base64-encoded bearer token used when basic credentials are not provided."
     )
     private Property<String> bearerToken;
 

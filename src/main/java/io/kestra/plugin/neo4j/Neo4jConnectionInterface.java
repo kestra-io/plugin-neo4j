@@ -5,8 +5,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 public interface Neo4jConnectionInterface {
     @Schema(
-        title = "The URL to a Neo4j instance",
-        description = "The URL can either be in HTTP or Bolt format"
+        title = "Neo4j endpoint URL",
+        description = "Bolt or HTTP(S) URI used to open the driver connection."
     )
     Property<String> getUrl();
 }
