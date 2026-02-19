@@ -39,7 +39,8 @@ import java.util.stream.StreamSupport;
 @EqualsAndHashCode
 @Getter
 @Schema(
-    title = "Query a Neo4j database."
+    title = "Execute a Neo4j Cypher query",
+    description = "Runs a rendered Cypher statement on a Neo4j database and handles results as fetch, fetch-one, store to internal storage, or no-op (default NONE)."
 )
 @Plugin(
     examples = {
@@ -77,16 +78,14 @@ import java.util.stream.StreamSupport;
 )
 public class Query extends AbstractNeo4jConnection implements RunnableTask<Query.Output> {
     @Schema(
-        title = "The Neo4J query to perform."
+        title = "Cypher query to run",
+        description = "Rendered with Flow variables before execution; must be valid for the chosen result mode."
     )
     private Property<String> query;
 
     @Schema(
-        title = "The way you want to store the data",
-        description = "FETCHONE output the first row"
-            + "FETCH output all the row"
-            + "STORE store all row in a file"
-            + "NONE do nothing"
+        title = "Result handling mode",
+        description = "FETCHONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
     )
     @Builder.Default
     private Property<StoreType> storeType = Property.ofValue(StoreType.NONE);
@@ -135,25 +134,26 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     @Getter
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
-            title = "List containing the fetched data",
-            description = "Only populated if using `FETCH`."
+            title = "Fetched rows",
+            description = "Populated when storeType is `FETCH`."
         )
         private List<Map<String, Object>> rows;
 
         @Schema(
-            title = "Map containing the first row of fetched data",
-            description = "Only populated if using `FETCHONE`."
+            title = "First fetched row",
+            description = "Populated when storeType is `FETCHONE`."
         )
         private Map<String, Object> row;
 
         @Schema(
-            title = "The uri of the stored result",
-            description = "Only populated if using `STORE`"
+            title = "Stored result URI",
+            description = "Populated when storeType is `STORE`; points to internal storage."
         )
         private URI uri;
 
         @Schema(
-            title = "The count of the rows fetch"
+            title = "Row count",
+            description = "Number of rows fetched or stored."
         )
         private Long size;
     }
