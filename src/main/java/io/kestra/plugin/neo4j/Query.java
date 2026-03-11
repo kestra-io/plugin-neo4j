@@ -1,26 +1,5 @@
 package io.kestra.plugin.neo4j;
 
-import com.google.common.collect.ImmutableMap;
-import io.kestra.core.models.annotations.Example;
-import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.Metric;
-import io.kestra.core.models.executions.metrics.Counter;
-import io.kestra.core.models.property.Property;
-import io.kestra.core.models.tasks.RunnableTask;
-import io.kestra.core.runners.RunContext;
-import io.kestra.core.serializers.FileSerde;
-import io.kestra.plugin.neo4j.models.StoreType;
-import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
-import org.neo4j.driver.*;
-import org.neo4j.driver.Record;
-import org.neo4j.driver.Value;
-import org.slf4j.Logger;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
-
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -32,6 +11,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import org.neo4j.driver.*;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Value;
+import org.slf4j.Logger;
+
+import com.google.common.collect.ImmutableMap;
+
+import io.kestra.core.models.annotations.Example;
+import io.kestra.core.models.annotations.Metric;
+import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.executions.metrics.Counter;
+import io.kestra.core.models.property.Property;
+import io.kestra.core.models.tasks.RunnableTask;
+import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.FileSerde;
+import io.kestra.plugin.neo4j.models.StoreType;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -109,7 +112,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                         .uri(store.getKey())
                         .size(store.getValue());
                     break;
-                    }
+                }
                 case FETCH: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
                     output.rows(fetchedResult);
@@ -167,7 +170,8 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         ) {
             Flux<Object> flowable = Flux
                 .create(
-                    s -> {
+                    s ->
+                    {
                         StreamSupport
                             .stream(
                                 result

@@ -1,28 +1,30 @@
 package io.kestra.plugin.neo4j;
 
-import io.kestra.core.models.annotations.Example;
-import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.PluginProperty;
-import io.kestra.core.models.annotations.Metric;
-import io.kestra.core.models.executions.metrics.Counter;
-import io.kestra.core.models.property.Property;
-import io.kestra.core.models.tasks.RunnableTask;
-import io.kestra.core.runners.RunContext;
-import io.kestra.core.serializers.FileSerde;
-import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
-import org.neo4j.driver.*;
-import org.slf4j.Logger;
-import reactor.core.publisher.Flux;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.neo4j.driver.*;
+import org.slf4j.Logger;
+
+import io.kestra.core.models.annotations.Example;
+import io.kestra.core.models.annotations.Metric;
+import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
+import io.kestra.core.models.executions.metrics.Counter;
+import io.kestra.core.models.property.Property;
+import io.kestra.core.models.tasks.RunnableTask;
+import io.kestra.core.runners.RunContext;
+import io.kestra.core.serializers.FileSerde;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
+import reactor.core.publisher.Flux;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -111,7 +113,8 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
                 var chunkValue = runContext.render(this.chunk).as(Integer.class).orElseThrow();
                 flowable = FileSerde.readAll(inputStream)
                     .buffer(chunkValue, chunkValue)
-                    .map(o -> {
+                    .map(o ->
+                    {
                         Map<String, Object> params = new HashMap<>();
                         params.put("props", o);
                         Result result = tx.run(query, params);

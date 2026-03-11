@@ -1,15 +1,17 @@
 package io.kestra.plugin.neo4j;
 
+import org.neo4j.driver.AuthToken;
+import org.neo4j.driver.AuthTokens;
+
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.Task;
 import io.kestra.core.runners.RunContext;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.neo4j.driver.AuthToken;
-import org.neo4j.driver.AuthTokens;
 
 @SuperBuilder
 @NoArgsConstructor
