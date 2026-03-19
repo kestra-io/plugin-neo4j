@@ -1,0 +1,129 @@
+id: all_neo4j
+namespace: sanitychecks.plugin-neo4j
+
+variables:
+  username: neo4j
+  password: kestra-pass
+
+tasks:
+  - id: init
+    type: io.kestra.plugin.core.output.OutputValues
+    values:
+      port: "{{ randomPort() }}"
+
+  - id: docker_start
+    type: io.kestra.plugin.docker.Run
+    containerImage: neo4j:4.4
+    portBindings:
+      - "{{ outputs.init.values.port }}:7687"
+    env:
+      NEO4J_AUTH: "{{ vars.username }}/{{ vars.password }}"
+    wait: false
+
+  - id: wait_for_neo4j
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      RETURN {status: "ready"} AS health
+    storeType: FETCHONE
+    retry:
+      type: constant
+      interval: PT5S
+      maxAttempt: 24
+
+  - id: reset_db
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      MATCH (n)
+      DETACH DELETE n
+
+  - id: seed_people
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      CREATE (:Person {name: "Alice", team: "engineering", score: 7})
+      CREATE (:Person {name: "Bob", team: "qa", score: 5})
+
+  - id: write_batch_people
+    type: io.kestra.plugin.core.storage.Write
+    content: |
+      {"name":"Carol","team":"product","score":8}
+      {"name":"Dave","team":"engineering","score":9}
+    extension: .ion
+
+  - id: batch_people
+    type: io.kestra.plugin.neo4j.Batch
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    from: "{{ outputs.write_batch_people.uri }}"
+    chunk: 1
+    query: |
+      UNWIND $props AS properties
+      CREATE (p:Person)
+      SET p = properties
+      RETURN p
+
+  - id: fetch_people
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      MATCH (p:Person)
+      RETURN p
+      ORDER BY p.name
+    storeType: FETCH
+
+  - id: fetch_one_person
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      MATCH (p:Person {name: "Dave"})
+      RETURN p
+    storeType: FETCHONE
+
+  - id: store_people
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: |
+      MATCH (p:Person)
+      RETURN p
+      ORDER BY p.name
+    storeType: STORE
+
+  - id: assert
+    type: io.kestra.plugin.core.execution.Assert
+    conditions:
+      - "{{ outputs.wait_for_neo4j.row.status == 'ready' }}"
+      - "{{ outputs.batch_people.rowCount == 2 }}"
+      - "{{ outputs.batch_people.updatedCount == 2 }}"
+      - "{{ outputs.fetch_people.size == 4 }}"
+      - "{{ outputs.fetch_people.rows[0].name == 'Alice' }}"
+      - "{{ outputs.fetch_people.rows[1].team == 'qa' }}"
+      - "{{ outputs.fetch_people.rows[3].score == 9 }}"
+      - "{{ outputs.fetch_one_person.row.name == 'Dave' }}"
+      - "{{ outputs.fetch_one_person.row.team == 'engineering' }}"
+      - "{{ outputs.store_people.size == 4 }}"
+      - "{{ fromIon(read(outputs.store_people.uri), allRows=true) | length == 4 }}"
+      - "{{ fromIon(read(outputs.store_people.uri), allRows=true)[2].name == 'Carol' }}"
+
+finally:
+  - id: purge
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+
+  - id: docker_stop
+    type: io.kestra.plugin.docker.Stop
+    containerId: "{{ outputs.docker_start.taskRunner.containerId }}"
+    kill: true
