@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import io.kestra.core.models.annotations.PluginProperty;
 
 @SuperBuilder
 @NoArgsConstructor
@@ -23,18 +24,21 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
         title = "Username for basic auth",
         description = "Used with `password`; takes precedence over bearer tokens when both are set."
     )
+    @PluginProperty(group = "connection")
     private Property<String> username;
 
     @Schema(
         title = "Password for basic auth",
         description = "Used with `username`; ignored if credentials are absent."
     )
+    @PluginProperty(group = "connection")
     private Property<String> password;
 
     @Schema(
         title = "Bearer token",
         description = "Base64-encoded bearer token used when basic credentials are not provided."
     )
+    @PluginProperty(group = "connection")
     private Property<String> bearerToken;
 
     protected AuthToken credentials(RunContext runContext) throws IllegalVariableEvaluationException {
