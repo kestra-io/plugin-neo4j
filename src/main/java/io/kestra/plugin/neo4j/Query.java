@@ -35,6 +35,7 @@ import lombok.experimental.SuperBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
+import io.kestra.core.models.annotations.PluginProperty;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -84,6 +85,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         title = "Cypher query to run",
         description = "Rendered with Flow variables before execution; must be valid for the chosen result mode."
     )
+    @PluginProperty(group = "main")
     private Property<String> query;
 
     @Schema(
@@ -91,6 +93,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         description = "FETCHONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
     )
     @Builder.Default
+    @PluginProperty(group = "destination")
     private Property<StoreType> storeType = Property.ofValue(StoreType.NONE);
 
     @Override

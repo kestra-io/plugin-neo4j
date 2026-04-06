@@ -78,7 +78,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
         title = "Source file URI",
         description = "Internal storage URI (e.g. `kestra://...`) containing JSON lines to stream into the batch."
     )
-    @PluginProperty(internalStorageURI = true)
+    @PluginProperty(internalStorageURI = true, group = "main")
     private Property<String> from;
 
     @NotNull
@@ -86,6 +86,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
         title = "Cypher UNWIND statement",
         description = "Must include `UNWIND $props AS ...`; `$props` is populated from each chunk of the source file. Rendered with Flow variables before execution."
     )
+    @PluginProperty(group = "main")
     private Property<String> query;
 
     @Schema(
@@ -94,6 +95,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
     )
     @Builder.Default
     @NotNull
+    @PluginProperty(group = "advanced")
     private Property<Integer> chunk = Property.ofValue(1000);
 
     @Override
