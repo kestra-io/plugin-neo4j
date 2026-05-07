@@ -31,7 +31,7 @@ tasks:
     retry:
       type: constant
       interval: PT5S
-      maxAttempt: 24
+      maxAttempts: 24
 
   - id: reset_db
     type: io.kestra.plugin.neo4j.Query
