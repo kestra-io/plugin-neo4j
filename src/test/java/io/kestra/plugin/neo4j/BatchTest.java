@@ -1,11 +1,15 @@
 package io.kestra.plugin.neo4j;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -82,6 +86,15 @@ public class BatchTest {
             n1.put("position", UUID.randomUUID().toString());
             FileSerde.write(output, n1);
         }
-        return storageInterface.put(TenantService.MAIN_TENANT, null, URI.create("/" + IdUtils.create() + ".ion"), new FileInputStream(tempFile));
+        URI uri = storageInterface.put(TenantService.MAIN_TENANT, null, URI.create("/" + IdUtils.create() + ".ion"), new FileInputStream(tempFile));
+
+        // Read back ION and assert count + content
+        try (InputStream is = new BufferedInputStream(storageInterface.get(TenantService.MAIN_TENANT, null, uri), FileSerde.BUFFER_SIZE)) {
+            List<Object> result = new ArrayList<>();
+            FileSerde.read(is, result::add);
+            assertThat(result.size(), is(25000));
+        }
+
+        return uri;
     }
 }
