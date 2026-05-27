@@ -1,7 +1,7 @@
 package io.kestra.plugin.neo4j;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.BufferedInputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
@@ -108,7 +108,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
             logger.debug("Starting query: {}", query);
 
-            try (BufferedReader inputStream = new BufferedReader(new InputStreamReader(runContext.storage().getFile(from)), FileSerde.BUFFER_SIZE)) {
+            try (InputStream inputStream = new BufferedInputStream(runContext.storage().getFile(from), FileSerde.BUFFER_SIZE)) {
                 Flux<Integer> flowable;
                 AtomicLong count = new AtomicLong();
 
