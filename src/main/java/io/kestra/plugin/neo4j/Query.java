@@ -1,8 +1,8 @@
 package io.kestra.plugin.neo4j;
 
-import java.io.BufferedWriter;
+import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.AbstractMap;
@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Metric;
 import io.kestra.core.models.annotations.Plugin;
+import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
@@ -35,7 +36,6 @@ import lombok.experimental.SuperBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
-import io.kestra.core.models.annotations.PluginProperty;
 
 @NoArgsConstructor
 @SuperBuilder
@@ -169,7 +169,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
 
         try (
-            var output = new BufferedWriter(new FileWriter(tempFile), FileSerde.BUFFER_SIZE)
+            var output = new BufferedOutputStream(new FileOutputStream(tempFile), FileSerde.BUFFER_SIZE)
         ) {
             Flux<Object> flowable = Flux
                 .create(
