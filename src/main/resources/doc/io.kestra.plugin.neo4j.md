@@ -4,7 +4,7 @@ Run Cypher queries and batch-load data into Neo4j from Kestra flows.
 
 ## Authentication
 
-Set `url` to your Neo4j endpoint (Bolt URI, e.g. `bolt://localhost:7687`, or HTTP(S)). For basic auth, set `username` and `password`. For token auth, set `bearerToken` (Base64-encoded). Store secrets in [secrets](https://kestra.io/docs/concepts/secret) and apply connection properties globally with [plugin defaults](https://kestra.io/docs/workflow-components/plugin-defaults).
+Set `url` to your Neo4j endpoint (Bolt URI, e.g. `bolt://localhost:7687`, or HTTP(S)). For basic auth, set `username` and `password`. For token auth, set `bearerToken` (Base64-encoded). Store secrets in [secrets](https://kestra.io/docs/concepts/secret) and set connection properties on each task.
 
 ## Tasks
 
