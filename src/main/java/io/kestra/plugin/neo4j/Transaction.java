@@ -10,7 +10,7 @@ import org.neo4j.driver.Config;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
-import org.neo4j.driver.TransactionWork;
+import org.neo4j.driver.TransactionCallback;
 import org.neo4j.driver.summary.ResultSummary;
 import org.slf4j.Logger;
 
@@ -118,7 +118,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
             CounterAccumulator accumulator = new CounterAccumulator();
 
-            TransactionWork<Void> work = tx -> {
+            TransactionCallback<Void> work = tx -> {
                 for (Statement statement : rStatements) {
                     String rQuery = runContext.render(statement.getQuery()).as(String.class).orElse("");
                     Map<String, Object> rParameters = statement.getParameters() == null
