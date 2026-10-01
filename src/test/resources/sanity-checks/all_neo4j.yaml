@@ -13,6 +13,7 @@ tasks:
 
   - id: docker_start
     type: io.kestra.plugin.docker.Run
+    host: "{{ envs.docker_host | default('unix:///dind/docker.sock') }}"
     containerImage: neo4j:4.4
     portBindings:
       - "{{ outputs.init.values.port }}:7687"
@@ -106,7 +107,7 @@ tasks:
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
     conditions:
-      - "{{ outputs.wait_for_neo4j.row.status == 'ready' }}"
+      - "{{ outputs.wait_for_neo4j.row.health.status == 'ready' }}"
       - "{{ outputs.batch_people.rowCount == 2 }}"
       - "{{ outputs.batch_people.updatedCount == 2 }}"
       - "{{ outputs.fetch_people.size == 4 }}"
@@ -125,5 +126,6 @@ finally:
 
   - id: docker_stop
     type: io.kestra.plugin.docker.Stop
+    host: "{{ envs.docker_host | default('unix:///dind/docker.sock') }}"
     containerId: "{{ outputs.docker_start.taskRunner.containerId }}"
     kill: true
