@@ -52,8 +52,7 @@ class TriggerTest {
 
     @Test
     void triggersWhenRowsExist() throws Exception {
-        Trigger trigger = createTrigger("RETURN 1 AS value");
-
+        Trigger trigger = createTrigger("RETURN {value: 1} AS result");
         Optional<Execution> result = evaluateTrigger(trigger);
 
         assertTrue(result.isPresent(), "Expected an execution when query returns rows");
