@@ -109,7 +109,7 @@ tasks:
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
     conditions:
-      - "{{ outputs.wait_for_neo4j.row.health.status == 'ready' }}"
+      - "{{ outputs.wait_for_neo4j.row.status == 'ready' }}"
       - "{{ outputs.batch_people.rowCount == 2 }}"
       - "{{ outputs.batch_people.updatedCount == 2 }}"
       - "{{ outputs.fetch_people.size == 4 }}"
