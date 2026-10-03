@@ -1,5 +1,8 @@
 package io.kestra.plugin.neo4j;
 
+import java.io.BufferedInputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +25,7 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.neo4j.models.StoreType;
@@ -46,6 +50,60 @@ class QueryTest {
             "RETURN p";
     }
 
+    static String scalarQuery() {
+        return "MATCH (p:Person) \n" +
+            "RETURN count(p) AS total";
+    }
+
+    static String scalarColumnQuery() {
+        return "MATCH (p:Person) \n" +
+            "RETURN p.name AS name \n" +
+            "ORDER BY name";
+    }
+
+    static String multipleColumnsQuery() {
+        return "MATCH (p:Person) \n" +
+            "RETURN p.name AS name, p.friends AS friends \n" +
+            "ORDER BY name";
+    }
+
+    static String mapColumnQuery() {
+        return "RETURN {status: 'ready'} AS health";
+    }
+
+    static String nestedNodesQuery() {
+        return "MATCH (a:Person {name: 'aDeveloper'}), (b:Person {name: 'aQa'}) \n" +
+            "RETURN [a, b] AS people";
+    }
+
+    static String pathQuery() {
+        return "MATCH p = (a:Person {name: 'aDeveloper'})-[:KNOWS]->(b:Person) \n" +
+            "RETURN p";
+    }
+
+    static String temporalAndSpatialQuery() {
+        return "RETURN point({x: 1.0, y: 2.0}) AS location2d, \n" +
+            "point({x: 1.0, y: 2.0, z: 3.0}) AS location3d, \n" +
+            "duration('P1DT2H') AS elapsed";
+    }
+
+    static String invalidQuery() {
+        return "MATCH p:Invalid \n" +
+            "RETURN p";
+    }
+
+    static Query buildQuery(String query, StoreType storeType) {
+        return Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue(query))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(storeType))
+            .build();
+    }
+
     @Container
     private final static Neo4jContainer<?> neo4jContainer = new Neo4jContainer<>(DockerImageName.parse("neo4j:4.4"));
 
@@ -66,6 +124,10 @@ class QueryTest {
                     "friends: ['otherQas', 'otherDevelopers']" +
                     "})"
             );
+            session.run(
+                "MATCH (a:Person {name: 'aDeveloper'}), (b:Person {name: 'aQa'}) " +
+                    "CREATE (a)-[:KNOWS {since: 2020}]->(b)"
+            );
         } catch (Exception e) {
             fail(e.getMessage());
         }
@@ -74,15 +136,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetch() throws Exception {
-        Query query = Query.builder()
-            .id(IdUtils.create())
-            .type(Query.class.getName())
-            .query(Property.ofValue(query()))
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
-            .build();
+        Query query = buildQuery(query(), StoreType.FETCH);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -90,45 +144,121 @@ class QueryTest {
         List<Map<String, Object>> rows = run.getRows();
         assertThat(rows.size(), is(2));
 
-        assertThat(rows.get(0).get("name"), is("aDeveloper"));
-        assertThat((List<String>) rows.get(0).get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
-        assertThat(rows.get(1).get("name"), is("aQa"));
-        assertThat((List<String>) rows.get(1).get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
+        Map<String, Object> first = (Map<String, Object>) rows.get(0).get("p");
+        Map<String, Object> second = (Map<String, Object>) rows.get(1).get("p");
+        assertThat(first.get("name"), is("aDeveloper"));
+        assertThat((List<String>) first.get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
+        assertThat(second.get("name"), is("aQa"));
+        assertThat((List<String>) second.get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void fetchOne() throws Exception {
-        Query query = Query.builder()
-            .id(IdUtils.create())
-            .type(Query.class.getName())
-            .query(Property.ofValue(query()))
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCHONE))
-            .build();
+        Query query = buildQuery(query(), StoreType.FETCHONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
 
-        Map<String, Object> row = run.getRow();
+        Map<String, Object> row = (Map<String, Object>) run.getRow().get("p");
 
         assertThat(row.get("name"), is("aDeveloper"));
         assertThat((List<String>) row.get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
     }
 
     @Test
+    void fetchOneScalar() throws Exception {
+        Query query = buildQuery(scalarQuery(), StoreType.FETCHONE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        assertThat(run.getRow().get("total"), is(2L));
+        assertThat(run.getSize(), is(1L));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchMultipleColumns() throws Exception {
+        Query query = buildQuery(multipleColumnsQuery(), StoreType.FETCH);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        // one map per record, not one entry per column
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(2));
+        assertThat(run.getSize(), is(2L));
+        assertThat(rows.get(0).get("name"), is("aDeveloper"));
+        assertThat((List<String>) rows.get(0).get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
+        assertThat(rows.get(1).get("name"), is("aQa"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchOneMapColumn() throws Exception {
+        Query query = buildQuery(mapColumnQuery(), StoreType.FETCHONE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        assertThat(((Map<String, Object>) run.getRow().get("health")).get("status"), is("ready"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchOneNestedNodes() throws Exception {
+        Query query = buildQuery(nestedNodesQuery(), StoreType.FETCHONE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        // nodes inside a list are converted to their properties too
+        List<Map<String, Object>> people = (List<Map<String, Object>>) run.getRow().get("people");
+        assertThat(people.size(), is(2));
+        assertThat(people.get(0).get("name"), is("aDeveloper"));
+        assertThat(people.get(1).get("name"), is("aQa"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchOnePath() throws Exception {
+        Query query = buildQuery(pathQuery(), StoreType.FETCHONE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        // a path keeps both its nodes and its relationships
+        Map<String, Object> path = (Map<String, Object>) run.getRow().get("p");
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) path.get("nodes");
+        List<Map<String, Object>> relationships = (List<Map<String, Object>>) path.get("relationships");
+        assertThat(nodes.size(), is(2));
+        assertThat(nodes.get(0).get("name"), is("aDeveloper"));
+        assertThat(nodes.get(1).get("name"), is("aQa"));
+        assertThat(relationships.size(), is(1));
+        assertThat(relationships.get(0).get("since"), is(2020L));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchOnePointAndDuration() throws Exception {
+        Query query = buildQuery(temporalAndSpatialQuery(), StoreType.FETCHONE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        Map<String, Object> location2d = (Map<String, Object>) run.getRow().get("location2d");
+        assertThat(location2d, is(Map.of("srid", 7203, "x", 1.0, "y", 2.0)));
+
+        Map<String, Object> location3d = (Map<String, Object>) run.getRow().get("location3d");
+        assertThat(location3d, is(Map.of("srid", 9157, "x", 1.0, "y", 2.0, "z", 3.0)));
+
+        assertThat(run.getRow().get("elapsed"), is("P0M1DT7200S"));
+    }
+
+    @Test
     void store() throws Exception {
-        Query query = Query.builder()
-            .id(IdUtils.create())
-            .type(Query.class.getName())
-            .query(Property.ofValue(query()))
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.STORE))
-            .build();
+        Query query = buildQuery(query(), StoreType.STORE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -137,21 +267,27 @@ class QueryTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void storeScalars() throws Exception {
+        Query query = buildQuery(scalarColumnQuery(), StoreType.STORE);
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        assertThat(run.getSize(), is(2L));
+
+        List<Object> stored = new ArrayList<>();
+        try (InputStream is = new BufferedInputStream(runContext.storage().getFile(run.getUri()), FileSerde.BUFFER_SIZE)) {
+            FileSerde.read(is, stored::add);
+        }
+        assertThat(stored.size(), is(2));
+        assertThat(((Map<String, Object>) stored.get(0)).get("name"), is("aDeveloper"));
+        assertThat(((Map<String, Object>) stored.get(1)).get("name"), is("aQa"));
+    }
+
+    @Test
     void failed() throws Exception {
-        Query query = Query.builder()
-            .id(IdUtils.create())
-            .type(Query.class.getName())
-            .query(
-                Property.ofValue(
-                    "MATCH p:Invalid \n" +
-                        "RETURN p"
-                )
-            )
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
-            .build();
+        Query query = buildQuery(invalidQuery(), StoreType.FETCH);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
 

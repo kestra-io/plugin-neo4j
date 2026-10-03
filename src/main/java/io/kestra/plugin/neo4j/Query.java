@@ -6,7 +6,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.AbstractMap;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -15,6 +14,9 @@ import java.util.stream.StreamSupport;
 import org.neo4j.driver.*;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Value;
+import org.neo4j.driver.types.Path;
+import org.neo4j.driver.types.Point;
+import org.neo4j.driver.types.TypeSystem;
 import org.slf4j.Logger;
 
 import com.google.common.collect.ImmutableMap;
@@ -104,7 +106,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             Output.OutputBuilder output = Output.builder();
 
             String render = runContext.render(query).as(String.class).orElse(null);
-            logger.warn("Starting query: {}", render);
+            logger.debug("Starting query: {}", render);
             Result result = session.run(render);
 
             switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
@@ -141,13 +143,13 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
             title = "Fetched rows",
-            description = "Populated when storeType is `FETCH`."
+            description = "Populated when storeType is `FETCH`. One map per record, keyed by the column names of the `RETURN` clause (e.g. `RETURN p` gives `rows[0].p.name`); nodes and relationships are exposed as their properties."
         )
         private List<Map<String, Object>> rows;
 
         @Schema(
             title = "First fetched row",
-            description = "Populated when storeType is `FETCHONE`."
+            description = "Populated when storeType is `FETCHONE`. A map keyed by the column names of the `RETURN` clause (e.g. `RETURN count(n) AS total` gives `row.total`)."
         )
         private Map<String, Object> row;
 
@@ -179,9 +181,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                             .stream(
                                 result
                                     .stream()
-                                    .map(Record::values)
-                                    .flatMap(Collection::stream)
-                                    .map(Value::asMap).spliterator(),
+                                    .map(Query::toMap).spliterator(),
                                 false
                             )
                             .forEach(s::next);
@@ -207,9 +207,52 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
     private List<Map<String, Object>> fetchResult(Result result) {
         return result.stream()
-            .map(Record::values)
-            .flatMap(Collection::stream)
-            .map(Value::asMap)
+            .map(Query::toMap)
             .collect(Collectors.toList());
+    }
+
+    private static Map<String, Object> toMap(Record record) {
+        return record.asMap(Query::toPlainValue);
+    }
+
+    // converts a driver value to plain Java types: nodes and relationships become their property maps,
+    // paths become their nodes and relationships, lists and maps are converted recursively
+    private static Object toPlainValue(Value value) {
+        TypeSystem types = TypeSystem.getDefault();
+
+        if (value.hasType(types.NODE())) {
+            return value.asNode().asMap(Query::toPlainValue);
+        }
+        if (value.hasType(types.RELATIONSHIP())) {
+            return value.asRelationship().asMap(Query::toPlainValue);
+        }
+        if (value.hasType(types.PATH())) {
+            Path path = value.asPath();
+            return Map.of(
+                "nodes", StreamSupport.stream(path.nodes().spliterator(), false)
+                    .map(node -> node.asMap(Query::toPlainValue))
+                    .toList(),
+                "relationships", StreamSupport.stream(path.relationships().spliterator(), false)
+                    .map(relationship -> relationship.asMap(Query::toPlainValue))
+                    .toList()
+            );
+        }
+        if (value.hasType(types.LIST())) {
+            return value.asList(Query::toPlainValue);
+        }
+        if (value.hasType(types.MAP())) {
+            return value.asMap(Query::toPlainValue);
+        }
+        if (value.hasType(types.POINT())) {
+            Point point = value.asPoint();
+            return Double.isNaN(point.z())
+                ? Map.of("srid", point.srid(), "x", point.x(), "y", point.y())
+                : Map.of("srid", point.srid(), "x", point.x(), "y", point.y(), "z", point.z());
+        }
+        if (value.hasType(types.DURATION())) {
+            return value.asIsoDuration().toString();
+        }
+
+        return value.asObject();
     }
 }

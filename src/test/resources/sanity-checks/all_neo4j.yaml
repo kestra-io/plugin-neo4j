@@ -64,7 +64,7 @@ tasks:
     username: "{{ vars.username }}"
     password: "{{ vars.password }}"
     from: "{{ outputs.write_batch_people.uri }}"
-    chunk: 1
+    chunk: 2
     query: |
       UNWIND $props AS properties
       CREATE (p:Person)
@@ -106,18 +106,18 @@ tasks:
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
     conditions:
-      - "{{ outputs.wait_for_neo4j.row.status == 'ready' }}"
+      - "{{ outputs.wait_for_neo4j.row.health.status == 'ready' }}"
       - "{{ outputs.batch_people.rowCount == 2 }}"
       - "{{ outputs.batch_people.updatedCount == 2 }}"
       - "{{ outputs.fetch_people.size == 4 }}"
-      - "{{ outputs.fetch_people.rows[0].name == 'Alice' }}"
-      - "{{ outputs.fetch_people.rows[1].team == 'qa' }}"
-      - "{{ outputs.fetch_people.rows[3].score == 9 }}"
-      - "{{ outputs.fetch_one_person.row.name == 'Dave' }}"
-      - "{{ outputs.fetch_one_person.row.team == 'engineering' }}"
+      - "{{ outputs.fetch_people.rows[0].p.name == 'Alice' }}"
+      - "{{ outputs.fetch_people.rows[1].p.team == 'qa' }}"
+      - "{{ outputs.fetch_people.rows[3].p.score == 9 }}"
+      - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
+      - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
       - "{{ outputs.store_people.size == 4 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true) | length == 4 }}"
-      - "{{ fromIon(read(outputs.store_people.uri), allRows=true)[2].name == 'Carol' }}"
+      - "{{ fromIon(read(outputs.store_people.uri), allRows=true)[2].p.name == 'Carol' }}"
 
 finally:
   - id: purge
