@@ -2,6 +2,7 @@ package io.kestra.plugin.neo4j;
 
 import org.neo4j.driver.AuthToken;
 import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.SessionConfig;
 
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -40,6 +41,21 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     )
     @PluginProperty(secret = true, group = "connection")
     private Property<String> bearerToken;
+
+    @Schema(
+        title = "Neo4j database name",
+        description = "Target database for the session (e.g. `neo4j`). When empty, the server default database is used."
+    )
+    @PluginProperty(group = "connection")
+    private Property<String> database;
+
+    protected SessionConfig sessionConfig(RunContext runContext) throws IllegalVariableEvaluationException {
+        String rendered = runContext.render(database).as(String.class).orElse(null);
+        if (rendered == null || rendered.isBlank()) {
+            return SessionConfig.defaultConfig();
+        }
+        return SessionConfig.forDatabase(rendered);
+    }
 
     protected AuthToken credentials(RunContext runContext) throws IllegalVariableEvaluationException {
         if (username != null && password != null) {
