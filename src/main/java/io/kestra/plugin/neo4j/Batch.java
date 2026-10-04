@@ -57,6 +57,30 @@ import reactor.core.publisher.Flux;
                     from: "{{ outputs.previous_task_id.uri }}"
                     chunk: 1000
                 """
+        ),
+        @Example(
+            full = true,
+            code = """
+                id: neo4j_batch_private_ca
+                namespace: company.team
+
+                tasks:
+                  - id: batch
+                    type: io.kestra.plugin.neo4j.Batch
+                    url: "bolt://localhost:7687"
+                    username: "{{ secret('NEO4J_USERNAME') }}"
+                    password: "{{ secret('NEO4J_PASSWORD') }}"
+                    encryption: true
+                    trustStrategy: CUSTOM
+                    trustedCertificate: "{{ secret('NEO4J_CA_PEM') }}"
+                    query: |
+                       UNWIND $props AS properties
+                       MERGE (y:Year {year: properties.year})
+                       MERGE (y)<-[:IN]-(e:Event {id: properties.id})\n
+                       RETURN e.id AS x ORDER BY x\n
+                    from: "{{ outputs.previous_task_id.uri }}"
+                    chunk: 1000
+                """
         )
     },
     metrics = {
@@ -100,7 +124,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext)); Session session = driver.session()) {
+        try (Driver driver = this.buildDriver(runContext); Session session = this.openSession(driver, runContext)) {
             Logger logger = runContext.logger();
             String query = runContext.render(this.query).as(String.class).orElseThrow();
             URI from = new URI(runContext.render(this.from).as(String.class).orElseThrow());
