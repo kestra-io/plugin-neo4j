@@ -102,6 +102,9 @@ tasks:
       RETURN p
       ORDER BY p.name
     storeType: STORE
+    parameters:
+      name: "Alice"
+    database: neo4j
 
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
