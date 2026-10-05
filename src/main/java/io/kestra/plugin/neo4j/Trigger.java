@@ -1,4 +1,3 @@
-
 package io.kestra.plugin.neo4j;
 
 import java.time.Duration;
@@ -105,14 +104,8 @@ public class Trigger extends AbstractTrigger
     @PluginProperty(group = "execution")
     private final Duration interval = Duration.ofSeconds(60);
 
-    @Override
-    public Optional<Execution> evaluate(
-        ConditionContext conditionContext,
-        TriggerContext context) throws Exception {
-        RunContext runContext = conditionContext.getRunContext();
-        var logger = runContext.logger();
-
-        Query queryTask = Query.builder()
+    protected Query createQuery() {
+        return Query.builder()
             .id(this.id)
             .type(Query.class.getName())
             .url(this.url)
@@ -122,13 +115,25 @@ public class Trigger extends AbstractTrigger
             .query(this.query)
             .storeType(this.storeType)
             .build();
+    }
 
+    @Override
+    public Optional<Execution> evaluate(
+        ConditionContext conditionContext,
+        TriggerContext context) throws Exception {
+        RunContext runContext = conditionContext.getRunContext();
+        var logger = runContext.logger();
+
+        Query queryTask = this.createQuery();
         Query.Output output = queryTask.run(runContext);
         long size = Optional.ofNullable(output.getSize()).orElse(0L);
 
         logger.debug("Neo4j trigger query returned {} rows", size);
 
         if (size == 0) {
+            if (output.getUri() != null) {
+                runContext.storage().deleteFile(output.getUri());
+            }
             return Optional.empty();
         }
 
