@@ -28,6 +28,7 @@ import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
+import io.kestra.plugin.neo4j.models.AccessMode;
 import io.kestra.plugin.neo4j.models.StoreType;
 
 import jakarta.inject.Inject;
@@ -164,6 +165,26 @@ class QueryTest {
 
         assertThat(row.get("name"), is("aDeveloper"));
         assertThat((List<String>) row.get("friends"), containsInAnyOrder("otherDevelopers", "PO", "otherQas"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void fetchWithReadAccessMode() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .accessMode(Property.ofValue(AccessMode.READ))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        assertThat(run.getSize(), is(2L));
     }
 
     @Test
