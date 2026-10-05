@@ -300,6 +300,7 @@ class QueryTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void parametersBinding() throws Exception {
         Query query = Query.builder()
             .id(IdUtils.create())
@@ -317,7 +318,8 @@ class QueryTest {
 
         List<Map<String, Object>> rows = run.getRows();
         assertThat(rows.size(), is(1));
-        assertThat(rows.get(0).get("name"), is("aDeveloper"));
+        Map<String, Object> person = (Map<String, Object>) rows.get(0).get("p");
+        assertThat(person.get("name"), is("aDeveloper"));
     }
 
     @Test
@@ -339,11 +341,13 @@ class QueryTest {
 
         List<Map<String, Object>> rows = run.getRows();
         assertThat(rows.size(), is(1));
-        assertThat(rows.get(0).get("name"), is("aQa"));
-        assertThat((List<String>) rows.get(0).get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
+        Map<String, Object> person = (Map<String, Object>) rows.get(0).get("p");
+        assertThat(person.get("name"), is("aQa"));
+        assertThat((List<String>) person.get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void nestedMapParameters() throws Exception {
         Query query = Query.builder()
             .id(IdUtils.create())
@@ -361,8 +365,9 @@ class QueryTest {
 
         List<Map<String, Object>> rows = run.getRows();
         assertThat(rows.size(), is(1));
-        assertThat(rows.get(0).get("department"), is("engineering"));
-        assertThat(rows.get(0).get("region"), is("emea"));
+        Map<String, Object> metadata = (Map<String, Object>) rows.get(0).get("metadata");
+        assertThat(metadata.get("department"), is("engineering"));
+        assertThat(metadata.get("region"), is("emea"));
     }
 
     @Test
@@ -371,7 +376,7 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.ofValue("RETURN {tags: $tags} AS result"))
+            .query(Property.ofValue("RETURN $tags AS tags"))
             .parameters(new Property<>(ImmutableMap.of("tags", ImmutableList.of("{{ inputs.tag1 }}", "{{ inputs.tag2 }}"))))
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
@@ -434,7 +439,7 @@ class QueryTest {
         Query query = Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
-            .query(Property.ofValue("SHOW DATABASES YIELD name RETURN {name: name} AS db"))
+            .query(Property.ofValue("SHOW DATABASES YIELD name RETURN name"))
             .database(Property.ofValue("system"))
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))

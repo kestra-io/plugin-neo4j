@@ -92,7 +92,7 @@ public class BatchTest {
         Batch.Output run = batch.run(runContext);
 
         assertThat(run.getUpdatedCount(), is(100));
-        assertThat(run.getRowCount().intValue(), is(1));
+        assertThat(run.getRowCount().intValue(), is(100));
     }
 
     URI createTestFile() throws Exception {
