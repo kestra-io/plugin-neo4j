@@ -26,6 +26,8 @@ Control server certificate trust with `trustStrategy`:
 
 `trustedCertificate` accepts either the PEM certificate content (e.g. `"{{ secret('NEO4J_CA_PEM') }}"`) or a Kestra internal storage URI (e.g. `kestra://.../ca.crt`). When `trustedCertificate` is supplied without an explicit `trustStrategy`, `CUSTOM` is inferred. Certificate content is never logged.
 
+Trust settings are never silently ignored: supplying `trustStrategy` or `trustedCertificate` with a plain `bolt://` or `neo4j://` URL and unset `encryption` enables TLS automatically, while combining trust settings with `encryption: false` is rejected with a configuration error. Secure `+s`/`+ssc` URI schemes are always left to the driver.
+
 Tune `connectionTimeout` (default 30 seconds) and `maxConnectionPoolSize` (default 100) under the advanced group when needed.
 
 ## Tasks

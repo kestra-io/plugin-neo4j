@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.neo4j.driver.exceptions.SecurityException;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -111,8 +112,8 @@ class Neo4jTlsIntegrationTest {
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
 
-        // The test CA is unknown to the system store, so the handshake must fail.
-        assertThrows(ServiceUnavailableException.class, () -> query.run(runContext));
+        // The test CA is unknown to the system store, so the TLS handshake must fail.
+        assertThrows(SecurityException.class, () -> query.run(runContext));
     }
 
     @Test

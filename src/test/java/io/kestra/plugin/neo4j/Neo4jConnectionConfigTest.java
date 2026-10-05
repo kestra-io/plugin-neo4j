@@ -162,6 +162,65 @@ class Neo4jConnectionConfigTest {
     }
 
     @Test
+    void trustWithExplicitlyDisabledEncryptionFails() throws Exception {
+        Query customTrust = queryBuilder()
+            .encryption(Property.ofValue(false))
+            .trustStrategy(Property.ofValue(TrustStrategy.CUSTOM))
+            .trustedCertificate(Property.ofValue(testCaPem()))
+            .build();
+        RunContext customContext = TestsUtils.mockRunContext(runContextFactory, customTrust, ImmutableMap.of());
+        IllegalArgumentException customError = assertThrows(IllegalArgumentException.class, () -> customTrust.driverConfig(customContext));
+        assertThat(customError.getMessage(), containsString("encryption"));
+
+        Query certificateOnly = queryBuilder()
+            .encryption(Property.ofValue(false))
+            .trustedCertificate(Property.ofValue(testCaPem()))
+            .build();
+        RunContext certificateContext = TestsUtils.mockRunContext(runContextFactory, certificateOnly, ImmutableMap.of());
+        IllegalArgumentException certificateError = assertThrows(IllegalArgumentException.class, () -> certificateOnly.driverConfig(certificateContext));
+        assertThat(certificateError.getMessage(), containsString("encryption"));
+    }
+
+    @Test
+    void trustInfersEncryptionForPlainScheme() throws Exception {
+        Query inferred = queryBuilder()
+            .trustedCertificate(Property.ofValue(testCaPem()))
+            .build();
+        RunContext inferredContext = TestsUtils.mockRunContext(runContextFactory, inferred, ImmutableMap.of());
+
+        Config inferredConfig = inferred.driverConfig(inferredContext);
+
+        assertThat(inferredConfig.encrypted(), is(true));
+        assertThat(inferredConfig.trustStrategy().strategy(), is(Config.TrustStrategy.Strategy.TRUST_CUSTOM_CA_SIGNED_CERTIFICATES));
+
+        Query explicitCustom = queryBuilder()
+            .trustStrategy(Property.ofValue(TrustStrategy.CUSTOM))
+            .trustedCertificate(Property.ofValue(testCaPem()))
+            .build();
+        RunContext explicitContext = TestsUtils.mockRunContext(runContextFactory, explicitCustom, ImmutableMap.of());
+
+        assertThat(explicitCustom.driverConfig(explicitContext).encrypted(), is(true));
+    }
+
+    @Test
+    void secureSchemeKeepsUriDrivenTls() throws Exception {
+        Query secure = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .url(Property.ofValue("bolt+s://localhost:7687"))
+            .query(Property.ofValue("RETURN 1 AS n"))
+            .trustedCertificate(Property.ofValue(testCaPem()))
+            .build();
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, secure, ImmutableMap.of());
+
+        Config config = secure.driverConfig(runContext);
+
+        // TLS itself comes from the URI scheme; the driver config must not force or forbid it.
+        assertThat(config.encrypted(), is(false));
+        assertThat(config.trustStrategy().strategy(), is(Config.TrustStrategy.Strategy.TRUST_CUSTOM_CA_SIGNED_CERTIFICATES));
+    }
+
+    @Test
     void customTimeoutAndPoolSize() throws Exception {
         Query task = queryBuilder()
             .connectionTimeout(Property.ofValue(Duration.ofSeconds(10)))

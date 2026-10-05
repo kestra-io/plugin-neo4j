@@ -36,6 +36,19 @@ class Neo4jDriverConfigTest {
     }
 
     @Test
+    void plainSchemeDetection() {
+        assertThat(AbstractNeo4jConnection.isPlainScheme("bolt://localhost:7687"), is(true));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("neo4j://localhost:7687"), is(true));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("BOLT://localhost:7687"), is(true));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("bolt+s://localhost:7687"), is(false));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("bolt+ssc://localhost:7687"), is(false));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("neo4j+s://localhost:7687"), is(false));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("neo4j+ssc://localhost:7687"), is(false));
+        assertThat(AbstractNeo4jConnection.isPlainScheme(null), is(false));
+        assertThat(AbstractNeo4jConnection.isPlainScheme("not-a-url"), is(false));
+    }
+
+    @Test
     void accessModeMappingDefaultsToWrite() {
         assertThat(AbstractNeo4jConnection.toDriverAccessMode(null), is(org.neo4j.driver.AccessMode.WRITE));
         assertThat(AbstractNeo4jConnection.toDriverAccessMode(AccessMode.WRITE), is(org.neo4j.driver.AccessMode.WRITE));

@@ -100,7 +100,9 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     @Schema(
         title = "Enable TLS encryption",
         description = "When `true`, encrypted traffic is forced with `withEncryption()`; when `false`, unencrypted traffic is forced with `withoutEncryption()`. " +
-            "When unset, the driver default applies so the connection URI scheme keeps working (`bolt+s`, `bolt+ssc`, `neo4j+s`, `neo4j+ssc` stay encrypted, plain `bolt`/`neo4j` stay unencrypted)."
+            "When unset, the driver default applies so the connection URI scheme keeps working (`bolt+s`, `bolt+ssc`, `neo4j+s`, `neo4j+ssc` stay encrypted, plain `bolt`/`neo4j` stay unencrypted), "
+            +
+            "except that supplying `trustStrategy` or `trustedCertificate` with a plain `bolt://` or `neo4j://` URL enables encryption automatically since trust settings are meaningless over plaintext."
     )
     @PluginProperty(group = "connection")
     private Property<Boolean> encryption;
@@ -227,10 +229,25 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
         Config.ConfigBuilder builder = Config.builder();
 
         Boolean encryption = runContext.render(this.encryption).as(Boolean.class).orElse(null);
+        TrustStrategy trustStrategy = runContext.render(this.trustStrategy).as(TrustStrategy.class).orElse(null);
+        String certificate = renderedOrNull(runContext, this.trustedCertificate);
+        boolean trustConfigured = trustStrategy != null || certificate != null;
+
+        if (Boolean.FALSE.equals(encryption) && trustConfigured) {
+            throw new IllegalArgumentException(
+                "Invalid Neo4j TLS configuration: `trustStrategy`/`trustedCertificate` require TLS encryption, but `encryption` is explicitly disabled. " +
+                    "Enable `encryption` or remove the trust configuration."
+            );
+        }
+
         if (Boolean.TRUE.equals(encryption)) {
             builder.withEncryption();
         } else if (Boolean.FALSE.equals(encryption)) {
             builder.withoutEncryption();
+        } else if (trustConfigured && isPlainScheme(renderedOrNull(runContext, getUrl()))) {
+            // Trust settings are meaningless over plaintext: infer TLS instead of silently ignoring them.
+            runContext.logger().debug("Enabling Neo4j TLS encryption because trust settings were supplied with a plain `bolt://`/`neo4j://` URL.");
+            builder.withEncryption();
         }
 
         Duration timeout = runContext.render(this.connectionTimeout).as(Duration.class).orElse(DEFAULT_CONNECTION_TIMEOUT);
@@ -238,9 +255,6 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
 
         Integer poolSize = runContext.render(this.maxConnectionPoolSize).as(Integer.class).orElse(DEFAULT_MAX_CONNECTION_POOL_SIZE);
         builder.withMaxConnectionPoolSize(poolSize);
-
-        TrustStrategy trustStrategy = runContext.render(this.trustStrategy).as(TrustStrategy.class).orElse(null);
-        String certificate = renderedOrNull(runContext, this.trustedCertificate);
 
         if (certificate != null && trustStrategy != null && trustStrategy != TrustStrategy.CUSTOM) {
             throw new IllegalArgumentException(
@@ -330,6 +344,19 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
 
     protected Session openSession(Driver driver, RunContext runContext) throws IllegalVariableEvaluationException {
         return driver.session(sessionConfig(runContext));
+    }
+
+    static boolean isPlainScheme(String url) {
+        if (url == null) {
+            return false;
+        }
+        String normalized = url.strip().toLowerCase(java.util.Locale.ROOT);
+        int end = normalized.indexOf("://");
+        if (end < 0) {
+            return false;
+        }
+        String scheme = normalized.substring(0, end);
+        return scheme.equals("bolt") || scheme.equals("neo4j");
     }
 
     private static String renderedOrNull(RunContext runContext, Property<String> property) throws IllegalVariableEvaluationException {
