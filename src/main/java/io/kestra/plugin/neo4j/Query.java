@@ -161,7 +161,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
             String render = runContext.render(query).as(String.class).orElse(null);
             logger.debug("Starting query: {}", render);
-            Map<String, Object> rParameters = runContext.render(parameters).asMap(String.class, Object.class);
+            var rParameters = runContext.render(parameters).asMap(String.class, Object.class);
             Result result = rParameters.isEmpty() ? session.run(render) : session.run(render, rParameters);
 
             switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {

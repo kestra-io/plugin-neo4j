@@ -88,8 +88,11 @@ tasks:
     username: "{{ vars.username }}"
     password: "{{ vars.password }}"
     query: |
-      MATCH (p:Person {name: "Dave"})
+      MATCH (p:Person {name: $name})
       RETURN p
+    parameters:
+      name: "Dave"
+    database: neo4j
     storeType: FETCHONE
 
   - id: store_people
@@ -102,9 +105,6 @@ tasks:
       RETURN p
       ORDER BY p.name
     storeType: STORE
-    parameters:
-      name: "Alice"
-    database: neo4j
 
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
