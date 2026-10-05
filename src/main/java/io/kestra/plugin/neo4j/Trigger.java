@@ -35,7 +35,7 @@ import lombok.experimental.SuperBuilder;
     description = "Periodically executes a Cypher query and starts a flow execution when it returns at least one row. " +
         "The trigger keeps no state between polls and fires again on every interval while the query returns rows. " +
         "Make the query idempotent, for example by filtering on a processed flag and updating it after processing. " +
-        "Returned values must be nodes or maps; storeType: NONE never fires."
+        "storeType: NONE never fires."
 )
 @Plugin(
     examples = {
