@@ -52,7 +52,11 @@ class TriggerTest {
 
     @Test
     void triggersWhenRowsExist() throws Exception {
-        Trigger trigger = createTrigger("RETURN {value: 1} AS result");
+        Trigger trigger = createTrigger(
+            "MERGE (p:TriggerTestPerson {name: 'Alice'}) " +
+                "RETURN p {.name} AS person"
+        );
+
         Optional<Execution> result = evaluateTrigger(trigger);
 
         assertTrue(result.isPresent(), "Expected an execution when query returns rows");
