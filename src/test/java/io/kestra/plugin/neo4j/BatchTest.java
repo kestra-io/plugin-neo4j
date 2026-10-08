@@ -72,7 +72,7 @@ public class BatchTest {
         Batch.Output run = batch.run(runContext);
 
         assertThat(run.getUpdatedCount(), is(25000));
-        assertThat(run.getRowCount().intValue(), is(25000));
+        assertThat(run.getRowCount().intValue(), is(25));
     }
 
     @Test

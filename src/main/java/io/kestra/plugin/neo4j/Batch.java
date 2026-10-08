@@ -68,7 +68,7 @@ import reactor.core.publisher.Flux;
         @Metric(
             name = "records.updated",
             type = Counter.TYPE,
-            description = "The total number of rows returned by the statement across all chunks."
+            description = "The total number of records updated in the batch."
         )
     }
 )
@@ -124,7 +124,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
                         params.put("props", o);
                         Result result = tx.run(query, params);
                         int updated = result.list().size();
-                        count.addAndGet(o.size());
+                        count.incrementAndGet();
 
                         return updated;
                     });
@@ -134,7 +134,7 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
                 runContext.metric(Counter.of("records.processed", count.get(), "origin", "Batch"));
                 runContext.metric(Counter.of("records.updated", updated == null ? 0 : updated, "origin", "Batch"));
 
-                logger.info("Successfully processed {} records with {} updated rows", count.get(), updated);
+                logger.info("Successfully bulk {} queries with {} updated rows", count.get(), updated);
 
                 tx.commit();
 
@@ -153,16 +153,10 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
     @Builder
     @Getter
     public static class Output implements io.kestra.core.models.tasks.Output {
-        @Schema(
-            title = "The processed records count",
-            description = "The number of input records read from `from` and sent to the statement."
-        )
+        @Schema(title = "The count of executed queries")
         private final Long rowCount;
 
-        @Schema(
-            title = "The updated rows count",
-            description = "The number of rows returned by the statement across all chunks."
-        )
+        @Schema(title = "The updated rows count")
         private final Integer updatedCount;
     }
 
