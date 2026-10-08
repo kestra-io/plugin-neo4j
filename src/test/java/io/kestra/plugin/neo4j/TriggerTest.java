@@ -1,8 +1,9 @@
 package io.kestra.plugin.neo4j;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
+import java.io.FileNotFoundException;
+import java.net.URI;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -24,10 +25,12 @@ import jakarta.inject.Inject;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 @KestraTest
 @Testcontainers
@@ -62,31 +65,31 @@ class TriggerTest {
 
     @Test
     void triggersWhenRowsExist() throws Exception {
-        Trigger trigger = createTrigger(
+        var trigger = createTrigger(
             "MERGE (p:TriggerTestPerson {name: 'Alice'}) " +
                 "RETURN p {.name} AS person"
         );
 
-        Optional<Execution> result = evaluateTrigger(trigger);
+        var result = evaluateTrigger(trigger);
 
         assertTrue(result.isPresent(), "Expected an execution when query returns rows");
     }
 
     @Test
     void doesNotTriggerWhenNoRowsExist() throws Exception {
-        Trigger trigger = createTrigger(
+        var trigger = createTrigger(
             "MATCH (p:TriggerTestPerson {name: 'this-person-does-not-exist'}) " +
                 "RETURN p.name AS name"
         );
 
-        Optional<Execution> result = evaluateTrigger(trigger);
+        var result = evaluateTrigger(trigger);
 
         assertFalse(result.isPresent(), "Expected no execution when query returns no rows");
     }
 
     @Test
     void deletesStoredResultWhenNoRowsExist() throws Exception {
-        Trigger trigger = createTrigger(
+        var trigger = createTrigger(
             "MATCH (p:TriggerTestPerson {name: 'this-person-does-not-exist'}) " +
                 "RETURN p.name AS name",
             StoreType.STORE
@@ -95,25 +98,19 @@ class TriggerTest {
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
         var runContext = mocked.getKey().getRunContext();
 
-        var uri = runContext.storage().putFile(
-            new ByteArrayInputStream("test".getBytes(StandardCharsets.UTF_8)),
-            "trigger-test.ion"
-        );
-
-        assertNotNull(runContext.storage().getAttributes(uri));
-
-        Query.Output output = Query.Output.builder()
-            .uri(uri)
-            .size(0L)
-            .build();
-
-        Query query = mock(Query.class);
-        doReturn(output).when(query).run(any(RunContext.class));
-
-        Trigger testTrigger = org.mockito.Mockito.spy(trigger);
+        var storedUri = new AtomicReference<URI>();
+        var testTrigger = spy(trigger);
+        var query = spy(trigger.createQuery());
+        doAnswer(invocation ->
+        {
+            var output = (Query.Output) invocation.callRealMethod();
+            storedUri.set(output.getUri());
+            assertNotNull(runContext.storage().getAttributes(output.getUri()));
+            return output;
+        }).when(query).run(any(RunContext.class));
         doReturn(query).when(testTrigger).createQuery();
 
-        Optional<Execution> result = testTrigger.evaluate(
+        var result = testTrigger.evaluate(
             mocked.getKey(),
             mocked.getValue()
         );
@@ -123,9 +120,49 @@ class TriggerTest {
             "Expected no execution when query returns no rows"
         );
 
-        assertFalse(
-            runContext.storage().deleteFile(uri),
+        assertNotNull(storedUri.get(), "Expected STORE query to create a result file");
+        assertThrows(
+            FileNotFoundException.class,
+            () -> runContext.storage().getAttributes(storedUri.get()),
             "Expected stored result file to have been deleted"
         );
+    }
+
+    @Test
+    void storesResultsWhenRowsExist() throws Exception {
+        var trigger = createTrigger("RETURN {name: 'Alice'} AS person", StoreType.STORE);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+        var runContext = mocked.getKey().getRunContext();
+        var storedOutput = new AtomicReference<Query.Output>();
+        var query = spy(trigger.createQuery());
+        doAnswer(invocation ->
+        {
+            var output = (Query.Output) invocation.callRealMethod();
+            storedOutput.set(output);
+            return output;
+        }).when(query).run(any(RunContext.class));
+        var testTrigger = spy(trigger);
+        doReturn(query).when(testTrigger).createQuery();
+
+        var result = testTrigger.evaluate(mocked.getKey(), mocked.getValue());
+
+        assertTrue(result.isPresent(), "Expected STORE mode to create a trigger execution");
+        assertNotNull(storedOutput.get().getUri(), "Expected STORE mode to create a result file");
+        assertTrue(storedOutput.get().getSize() > 0, "Expected STORE mode to report stored rows");
+        assertNotNull(runContext.storage().getAttributes(storedOutput.get().getUri()));
+        runContext.storage().deleteFile(storedOutput.get().getUri());
+    }
+
+    @Test
+    void rejectsNoneStoreType() throws Exception {
+        var trigger = createTrigger("RETURN 1 AS value", StoreType.NONE);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var exception = org.junit.jupiter.api.Assertions.assertThrows(
+            IllegalArgumentException.class,
+            () -> trigger.evaluate(mocked.getKey(), mocked.getValue())
+        );
+
+        assertTrue(exception.getMessage().contains("NONE is not supported"));
     }
 }

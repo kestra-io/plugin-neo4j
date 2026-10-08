@@ -14,10 +14,10 @@ import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
-import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.neo4j.models.StoreType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -70,6 +70,7 @@ public class Trigger extends AbstractTrigger
 
     @Schema(title = "Neo4j endpoint URL")
     @PluginProperty(group = "connection")
+    @NotNull
     private Property<String> url;
 
     @Schema(title = "Username for basic authentication")
@@ -89,9 +90,13 @@ public class Trigger extends AbstractTrigger
 
     @Schema(title = "Cypher query to execute")
     @PluginProperty(group = "main")
+    @NotNull
     private Property<String> query;
 
-    @Schema(title = "Result handling mode")
+    @Schema(
+        title = "Result handling mode",
+        description = "Controls how query results are handled. FETCH (default) returns all rows, FETCHONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error."
+    )
     @Builder.Default
     @PluginProperty(group = "destination")
     private Property<StoreType> storeType = Property.ofValue(StoreType.FETCH);
@@ -121,13 +126,15 @@ public class Trigger extends AbstractTrigger
     public Optional<Execution> evaluate(
         ConditionContext conditionContext,
         TriggerContext context) throws Exception {
-        RunContext runContext = conditionContext.getRunContext();
+        var runContext = conditionContext.getRunContext();
+        var resolvedStoreType = runContext.render(this.storeType).as(StoreType.class).orElse(StoreType.FETCH);
+        if (resolvedStoreType == StoreType.NONE) {
+            throw new IllegalArgumentException("storeType NONE is not supported for Neo4j triggers; use FETCH, FETCHONE, or STORE");
+        }
         var logger = runContext.logger();
-
-        Query queryTask = this.createQuery();
-        Query.Output output = queryTask.run(runContext);
-        long size = Optional.ofNullable(output.getSize()).orElse(0L);
-
+        var queryTask = this.createQuery();
+        var output = queryTask.run(runContext);
+        var size = Optional.ofNullable(output.getSize()).orElse(0L);
         logger.debug("Neo4j trigger query returned {} rows", size);
 
         if (size == 0) {
