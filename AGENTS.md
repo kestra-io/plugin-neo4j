@@ -23,6 +23,7 @@ Single-module plugin. Source packages under `io.kestra.plugin`:
 
 - `io.kestra.plugin.neo4j.Batch`
 - `io.kestra.plugin.neo4j.Query`
+- `io.kestra.plugin.neo4j.Trigger`
 
 ### Project Structure
 

@@ -156,16 +156,22 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
         try (
             Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext));
             Session session = driver.session(this.sessionConfig(runContext))
-        ) {
+        ){
             Output.OutputBuilder output = Output.builder();
-
             String render = runContext.render(query).as(String.class).orElse(null);
             logger.debug("Starting query: {}", render);
-            var rParameters = runContext.render(parameters).asMap(String.class, Object.class);
-            Result result = rParameters.isEmpty() ? session.run(render) : session.run(render, rParameters);
+
+            var rParameters = runContext.render(parameters).asMap(String.class,
+                 Object.class);
+            Result result = rParameters.isEmpty()
+             ? session.run(render)
+             : session.run(render, rParameters);
 
             switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
-                case STORE: {
+            case NONE: {
+            break;
+            }
+            case STORE: {
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));
                     output
