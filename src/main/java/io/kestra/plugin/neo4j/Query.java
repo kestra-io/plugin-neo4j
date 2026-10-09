@@ -171,7 +171,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             case NONE: {
             break;
             }
-            case STORE: { 
+            case STORE: {
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));
                     output
