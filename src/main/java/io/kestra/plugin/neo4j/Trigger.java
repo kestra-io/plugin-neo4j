@@ -35,7 +35,8 @@ import lombok.experimental.SuperBuilder;
     description = "Periodically executes a Cypher query and starts a flow execution when it returns at least one row. " +
         "The trigger keeps no state between polls and fires again on every interval while the query returns rows. " +
         "Make the query idempotent, for example by filtering on a processed flag and updating it after processing. " +
-        "storeType: NONE never fires."
+        "The trigger polls the default Neo4j database only. Database selection and query parameters are not currently configurable. " +
+        "storeType: NONE is unsupported and fails with an error."
 )
 @Plugin(
     examples = {

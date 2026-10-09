@@ -19,7 +19,7 @@ Set `url` to your Neo4j endpoint (Bolt URI, e.g. `bolt://localhost:7687`, or HTT
 Key properties:
 
 - `query` — Cypher query to execute.
-- `storeType` — controls result handling: `FETCH` (default), `FETCHONE`, `STORE`, or `NONE`.
+- `storeType` — controls result handling: `FETCH` (default), `FETCHONE`, or `STORE`. `NONE` is unsupported for triggers and throws an error.
 - `interval` — time between query executions, defaulting to 60 seconds.
 
 Trigger outputs include:
@@ -31,4 +31,4 @@ Trigger outputs include:
 
 The trigger does not keep state between polls. If the query continues to return rows, the trigger fires again on every polling interval. To avoid processing the same records repeatedly, use an idempotent query pattern, such as filtering on a processed flag and updating that flag after processing.
 
-`storeType: NONE` does not produce a trigger execution.
+`storeType: NONE` is unsupported and throws an `IllegalArgumentException`.

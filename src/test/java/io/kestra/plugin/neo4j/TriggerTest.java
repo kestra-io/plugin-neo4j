@@ -158,7 +158,7 @@ class TriggerTest {
         var trigger = createTrigger("RETURN 1 AS value", StoreType.NONE);
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
 
-        var exception = org.junit.jupiter.api.Assertions.assertThrows(
+        var exception = assertThrows(
             IllegalArgumentException.class,
             () -> trigger.evaluate(mocked.getKey(), mocked.getValue())
         );
