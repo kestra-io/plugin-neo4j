@@ -100,7 +100,10 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext)); Session session = driver.session()) {
+        try (
+            Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext));
+            Session session = driver.session(this.sessionConfig(runContext))
+        ) {
             Logger logger = runContext.logger();
             String query = runContext.render(this.query).as(String.class).orElseThrow();
             URI from = new URI(runContext.render(this.from).as(String.class).orElseThrow());

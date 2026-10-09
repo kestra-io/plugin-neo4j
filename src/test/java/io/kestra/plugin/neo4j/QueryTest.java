@@ -19,6 +19,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import io.kestra.core.junit.annotations.KestraTest;
@@ -34,6 +35,7 @@ import jakarta.inject.Inject;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -295,5 +297,161 @@ class QueryTest {
         {
             query.run(runContext);
         });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void parametersBinding() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("MATCH (p:Person {name: $name}) \n" + "RETURN p"))
+            .parameters(Property.ofValue(ImmutableMap.of("name", "aDeveloper")))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(1));
+        Map<String, Object> person = (Map<String, Object>) rows.get(0).get("p");
+        assertThat(person.get("name"), is("aDeveloper"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void renderedParameters() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("MATCH (p:Person {name: $name}) \n" + "RETURN p"))
+            .parameters(new Property<>(ImmutableMap.of("name", "{{ inputs.personName }}")))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("personName", "aQa"));
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(1));
+        Map<String, Object> person = (Map<String, Object>) rows.get(0).get("p");
+        assertThat(person.get("name"), is("aQa"));
+        assertThat((List<String>) person.get("friends"), containsInAnyOrder("otherQas", "otherDevelopers"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nestedMapParameters() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("RETURN $metadata AS metadata"))
+            .parameters(new Property<>(ImmutableMap.of("metadata", ImmutableMap.of("department", "{{ inputs.dept }}", "region", "emea"))))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("dept", "engineering"));
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(1));
+        Map<String, Object> metadata = (Map<String, Object>) rows.get(0).get("metadata");
+        assertThat(metadata.get("department"), is("engineering"));
+        assertThat(metadata.get("region"), is("emea"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void nestedListParameters() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("RETURN $tags AS tags"))
+            .parameters(new Property<>(ImmutableMap.of("tags", ImmutableList.of("{{ inputs.tag1 }}", "{{ inputs.tag2 }}"))))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("tag1", "red", "tag2", "blue"));
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(1));
+        assertThat((List<String>) rows.get(0).get("tags"), containsInAnyOrder("red", "blue"));
+    }
+
+    @Test
+    void missingParameter() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("MATCH (p:Person {name: $missing}) \n" + "RETURN p"))
+            .parameters(Property.ofValue(ImmutableMap.of("name", "aDeveloper")))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+
+        assertThrows(ClientException.class, () ->
+        {
+            query.run(runContext);
+        });
+    }
+
+    @Test
+    void explicitDatabase() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue(query()))
+            .database(Property.ofValue("neo4j"))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        assertThat(rows.size(), is(2));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void systemDatabase() throws Exception {
+        Query query = Query.builder()
+            .id(IdUtils.create())
+            .type(Query.class.getName())
+            .query(Property.ofValue("SHOW DATABASES YIELD name RETURN name"))
+            .database(Property.ofValue("system"))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .storeType(Property.ofValue(StoreType.FETCH))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        Query.Output run = query.run(runContext);
+
+        List<Map<String, Object>> rows = run.getRows();
+        List<String> names = rows.stream().map(row -> (String) row.get("name")).toList();
+        assertThat(names, hasItems("neo4j", "system"));
     }
 }
