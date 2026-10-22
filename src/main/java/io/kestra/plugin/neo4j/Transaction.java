@@ -199,9 +199,9 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
                     for (int i = 0; i < rStatements.size(); i++) {
                         failedStatement.set(i);
-                        RenderedStatement statement = rStatements.get(i);
+                        RenderedStatement rStatement = rStatements.get(i);
 
-                        ResultSummary summary = transaction.run(statement.query(), statement.parameters()).consume();
+                        ResultSummary summary = transaction.run(rStatement.query(), rStatement.parameters()).consume();
                         transactionTotals.add(summary.counters());
                         transactionTotals.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
                     }
