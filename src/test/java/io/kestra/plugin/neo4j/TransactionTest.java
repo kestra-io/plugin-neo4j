@@ -1,5 +1,6 @@
 package io.kestra.plugin.neo4j;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +27,8 @@ import io.kestra.plugin.neo4j.models.Statement;
 import jakarta.inject.Inject;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -56,7 +59,7 @@ class TransactionTest {
         assertThat(output.getCounters().getNodesDeleted(), is(0L));
         assertThat(output.getCounters().getLabelsAdded(), is(2L));
         assertThat(output.getCounters().getLabelsRemoved(), is(0L));
-        assertThat(output.getResultAvailableAfter() >= 0L, is(true));
+        assertThat(output.getResultAvailableAfter(), greaterThanOrEqualTo(0L));
 
         double createdMetric = runContext.metrics().stream()
             .filter(metric -> "nodes.created".equals(metric.getName()))
@@ -66,19 +69,8 @@ class TransactionTest {
 
         assertThat(createdMetric, is(2.0));
 
-        try (Driver driver = driver(); Session session = driver.session()) {
-            long nodes = session.run("MATCH (n) WHERE n:TransactionAlice OR n:TransactionBob RETURN count(n) AS c")
-                .single()
-                .get("c")
-                .asLong();
-            long relationships = session.run("MATCH (:TransactionAlice)-[r:KNOWS]->(:TransactionBob) RETURN count(r) AS c")
-                .single()
-                .get("c")
-                .asLong();
-
-            assertThat(nodes, is(2L));
-            assertThat(relationships, is(1L));
-        }
+        assertThat(count("MATCH (n) WHERE n:TransactionAlice OR n:TransactionBob RETURN count(n) AS c"), is(2L));
+        assertThat(count("MATCH (:TransactionAlice)-[r:KNOWS]->(:TransactionBob) RETURN count(r) AS c"), is(1L));
     }
 
     @Test
@@ -90,17 +82,9 @@ class TransactionTest {
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
-        assertThat(exception.getMessage().contains("Statement 2"), is(true));
-
-        try (Driver driver = driver(); Session session = driver.session()) {
-            long created = session.run("MATCH (p:RollbackPerson) RETURN count(p) AS c")
-                .single()
-                .get("c")
-                .asLong();
-
-            assertThat(created, is(0L));
-        }
+        var exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("Statement 2"));
+        assertThat(count("MATCH (p:RollbackPerson) RETURN count(p) AS c"), is(0L));
     }
 
     @Test
@@ -154,6 +138,33 @@ class TransactionTest {
     }
 
     @Test
+    void failsOnBlankQuery() {
+        Transaction transaction = transactionWith(List.of(statement("   ", null)));
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("non-blank"));
+    }
+
+    @Test
+    void rejectsNegativeMaxRetryTime() {
+        var transaction = Transaction.builder()
+            .id(IdUtils.create())
+            .type(Transaction.class.getName())
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .statements(List.of(statement("RETURN 1 AS one", null)))
+            .maxRetryTime(Property.ofValue(Duration.ofSeconds(-5)))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+    }
+
+    @Test
     void failsOnEmptyStatements() {
         Transaction transaction = transactionWith(List.of());
 
@@ -182,6 +193,12 @@ class TransactionTest {
         }
 
         return builder.build();
+    }
+
+    private long count(String cypher) {
+        try (Driver driver = driver(); Session session = driver.session()) {
+            return session.run(cypher).single().get("c").asLong();
+        }
     }
 
     private Driver driver() {
