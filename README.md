@@ -11,7 +11,7 @@
 ## What
 
 - Provides plugin components under `io.kestra.plugin.neo4j`.
-- Includes classes such as `Batch`, `Query`, `StoreType`.
+- Includes classes such as `Batch`, `Query`, `Transaction`, `StoreType`.
 
 ## Documentation
 * The official Kestra documentation can be found under: [kestra.io](https://kestra.io)

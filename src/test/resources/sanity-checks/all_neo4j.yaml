@@ -106,6 +106,17 @@ tasks:
       ORDER BY p.name
     storeType: STORE
 
+  - id: transaction_temp
+    type: io.kestra.plugin.neo4j.Transaction
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    statements:
+      - query: "CREATE (:Temp {name: \"ephemeral\"})"
+      - query: |
+          MATCH (t:Temp {name: "ephemeral"})
+          DETACH DELETE t
+
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
     conditions:
@@ -119,6 +130,9 @@ tasks:
       - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
       - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
       - "{{ outputs.store_people.size == 4 }}"
+      - "{{ outputs.transaction_temp.statements == 2 }}"
+      - "{{ outputs.transaction_temp.counters.nodesCreated == 1 }}"
+      - "{{ outputs.transaction_temp.counters.nodesDeleted == 1 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true) | length == 4 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true)[2].p.name == 'Carol' }}"
 

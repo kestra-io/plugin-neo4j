@@ -107,7 +107,8 @@ public class Batch extends AbstractNeo4jConnection implements RunnableTask<Batch
             Logger logger = runContext.logger();
             String query = runContext.render(this.query).as(String.class).orElseThrow();
             URI from = new URI(runContext.render(this.from).as(String.class).orElseThrow());
-            Transaction tx = session.beginTransaction();
+            // fully qualified: io.kestra.plugin.neo4j.Transaction is a task in this package
+            org.neo4j.driver.Transaction tx = session.beginTransaction();
 
             logger.debug("Starting query: {}", query);
 
