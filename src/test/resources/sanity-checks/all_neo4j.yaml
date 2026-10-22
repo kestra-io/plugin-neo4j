@@ -130,7 +130,6 @@ tasks:
       - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
       - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
       - "{{ outputs.store_people.size == 4 }}"
-      - "{{ outputs.transaction_temp.statements == 2 }}"
       - "{{ outputs.transaction_temp.counters.nodesCreated == 1 }}"
       - "{{ outputs.transaction_temp.counters.nodesDeleted == 1 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true) | length == 4 }}"

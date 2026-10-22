@@ -16,7 +16,7 @@ class RunnerTest {
     @Test
     @ExecuteFlow("sanity-checks/all_neo4j.yaml")
     void all_neo4j(Execution execution) {
-        assertThat(execution.getTaskRunList(), hasSize(13));
+        assertThat(execution.getTaskRunList(), hasSize(14));
         assertThat(execution.getState().getCurrent(), is(State.Type.SUCCESS));
     }
 }

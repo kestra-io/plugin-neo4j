@@ -5,14 +5,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.neo4j.driver.Config;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
+import org.neo4j.driver.exceptions.Neo4jException;
 import org.neo4j.driver.summary.ResultSummary;
 import org.neo4j.driver.summary.SummaryCounters;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Metric;
@@ -25,7 +31,8 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.neo4j.models.Statement;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -68,6 +75,7 @@ import lombok.experimental.SuperBuilder;
                         parameters:
                           id: "{{ inputs.id }}"
                           name: "{{ inputs.name }}"
+                      - query: "MERGE (:Team {name: 'core'})"
                       - query: |
                           MATCH (p:Person {id: $id}), (t:Team {name: 'core'})
                           MERGE (p)-[:MEMBER_OF]->(t)
@@ -127,58 +135,88 @@ import lombok.experimental.SuperBuilder;
             name = "labels.added",
             type = Counter.TYPE,
             description = "The number of labels added to nodes by the transaction."
+        ),
+        @Metric(
+            name = "labels.removed",
+            type = Counter.TYPE,
+            description = "The number of labels removed from nodes by the transaction."
         )
     }
 )
 public class Transaction extends AbstractNeo4jConnection implements RunnableTask<Transaction.Output> {
-    private static final Duration DEFAULT_MAX_RETRY_TIME = Duration.ofSeconds(30);
+    @JsonIgnore
+    @Builder.Default
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private AtomicReference<Runnable> driverClose = new AtomicReference<>();
 
-    @NotNull
+    @NotEmpty
     @Schema(
         title = "Cypher statements to run atomically",
         description = "Rendered with Flow variables, then executed in declaration order inside one managed write transaction. A failure in any statement rolls back all of them."
     )
     @PluginProperty(group = "main")
-    private Property<List<Statement>> statements;
+    private List<Statement> statements;
 
+    @Builder.Default
     @Schema(
         title = "Maximum retry time",
         description = "ISO-8601 duration (default `PT30S`) during which the driver retries the transaction on transient failures such as deadlocks or leader switches."
     )
     @PluginProperty(group = "reliability")
-    private Property<Duration> maxRetryTime;
+    private Property<Duration> maxRetryTime = Property.ofValue(Duration.ofSeconds(30));
 
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        List<Statement> statements = runContext.render(this.statements).asList(Statement.class);
-        if (statements == null || statements.isEmpty()) {
-            throw new IllegalArgumentException("The `statements` property must contain at least one Cypher statement.");
+        List<RenderedStatement> rStatements = this.renderStatements(runContext);
+
+        Duration rMaxRetryTime = runContext.render(this.maxRetryTime).as(Duration.class).orElse(Duration.ofSeconds(30));
+        if (rMaxRetryTime.isNegative()) {
+            throw new IllegalArgumentException("The `maxRetryTime` property must not be negative, got " + rMaxRetryTime + ".");
         }
 
-        List<RenderedStatement> rendered = this.renderStatements(runContext, statements);
-
-        Duration maxRetry = runContext.render(this.maxRetryTime).as(Duration.class).orElse(DEFAULT_MAX_RETRY_TIME);
-
         Config config = Config.builder()
-            .withMaxTransactionRetryTime(maxRetry.toMillis(), TimeUnit.MILLISECONDS)
+            .withMaxTransactionRetryTime(rMaxRetryTime.toMillis(), TimeUnit.MILLISECONDS)
             .build();
 
-        logger.debug("Executing {} statement(s) in a single managed transaction", rendered.size());
+        String rUrl = runContext.render(getUrl()).as(String.class)
+            .orElseThrow(() -> new IllegalArgumentException("The `url` property is required."));
 
-        try (Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElseThrow(), this.credentials(runContext), config); Session session = driver.session(this.sessionConfig(runContext))) {
-            Totals totals = session.executeWrite(transaction -> {
-                Totals transactionTotals = new Totals();
+        logger.debug("Executing {} statement(s) in a single managed transaction", rStatements.size());
 
-                for (RenderedStatement statement : rendered) {
-                    ResultSummary summary = transaction.run(statement.query(), statement.parameters()).consume();
-                    transactionTotals.add(summary.counters());
-                    transactionTotals.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
+        try (Driver driver = GraphDatabase.driver(rUrl, this.credentials(runContext), config); Session session = driver.session(this.sessionConfig(runContext))) {
+            this.driverClose.set(driver::close);
+
+            AtomicInteger failedStatement = new AtomicInteger(-1);
+
+            Totals totals;
+            try {
+                totals = session.executeWrite(transaction -> {
+                    Totals transactionTotals = new Totals();
+
+                    for (int i = 0; i < rStatements.size(); i++) {
+                        failedStatement.set(i);
+                        RenderedStatement statement = rStatements.get(i);
+
+                        ResultSummary summary = transaction.run(statement.query(), statement.parameters()).consume();
+                        transactionTotals.add(summary.counters());
+                        transactionTotals.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
+                    }
+
+                    failedStatement.set(-1);
+                    return transactionTotals;
+                });
+            } catch (Neo4jException e) {
+                int index = failedStatement.get();
+                if (index < 0) {
+                    throw e;
                 }
 
-                return transactionTotals;
-            });
+                throw new IllegalStateException("Statement " + (index + 1) + " failed, the transaction was rolled back: " + e.getMessage(), e);
+            }
 
             runContext.metric(Counter.of("nodes.created", totals.nodesCreated, "origin", "Transaction"));
             runContext.metric(Counter.of("nodes.deleted", totals.nodesDeleted, "origin", "Transaction"));
@@ -186,10 +224,11 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             runContext.metric(Counter.of("relationships.deleted", totals.relationshipsDeleted, "origin", "Transaction"));
             runContext.metric(Counter.of("properties.set", totals.propertiesSet, "origin", "Transaction"));
             runContext.metric(Counter.of("labels.added", totals.labelsAdded, "origin", "Transaction"));
+            runContext.metric(Counter.of("labels.removed", totals.labelsRemoved, "origin", "Transaction"));
 
             logger.info(
                 "Committed {} statement(s): {} node(s) created, {} node(s) deleted, {} relationship(s) created, {} relationship(s) deleted, {} properties set",
-                rendered.size(),
+                rStatements.size(),
                 totals.nodesCreated,
                 totals.nodesDeleted,
                 totals.relationshipsCreated,
@@ -198,7 +237,6 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             );
 
             return Output.builder()
-                .statements((long) rendered.size())
                 .counters(
                     Counters.builder()
                         .nodesCreated(totals.nodesCreated)
@@ -207,28 +245,52 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
                         .relationshipsDeleted(totals.relationshipsDeleted)
                         .propertiesSet(totals.propertiesSet)
                         .labelsAdded(totals.labelsAdded)
+                        .labelsRemoved(totals.labelsRemoved)
                         .build()
                 )
                 .resultAvailableAfter(totals.resultAvailableAfterMillis)
                 .build();
+        } finally {
+            this.driverClose.set(null);
         }
     }
 
-    private List<RenderedStatement> renderStatements(RunContext runContext, List<Statement> statements) throws Exception {
-        List<RenderedStatement> rendered = new ArrayList<>(statements.size());
-
-        for (Statement statement : statements) {
-            if (statement == null || statement.getQuery() == null) {
-                throw new IllegalArgumentException("Every entry of `statements` must define a `query`.");
-            }
-
-            rendered.add(new RenderedStatement(
-                runContext.render(statement.getQuery()).as(String.class).orElseThrow(),
-                this.renderParameters(runContext, statement)
-            ));
+    @Override
+    public void kill() {
+        Runnable close = this.driverClose.getAndSet(null);
+        if (close == null) {
+            return;
         }
 
-        return rendered;
+        try {
+            close.run();
+        } catch (RuntimeException e) {
+            LoggerFactory.getLogger(Transaction.class).warn("Failed to close the Neo4j driver after the task was killed", e);
+        }
+    }
+
+    private List<RenderedStatement> renderStatements(RunContext runContext) throws Exception {
+        if (this.statements == null || this.statements.isEmpty()) {
+            throw new IllegalArgumentException("The `statements` property must contain at least one statement.");
+        }
+
+        List<RenderedStatement> rStatements = new ArrayList<>(this.statements.size());
+
+        for (int i = 0; i < this.statements.size(); i++) {
+            int position = i + 1;
+            Statement statement = this.statements.get(i);
+            if (statement == null || statement.getQuery() == null) {
+                throw new IllegalArgumentException("Statement " + position + " must define a `query`.");
+            }
+
+            String rQuery = runContext.render(statement.getQuery()).as(String.class)
+                .filter(query -> !query.isBlank())
+                .orElseThrow(() -> new IllegalArgumentException("Statement " + position + " must define a non-blank `query`."));
+
+            rStatements.add(new RenderedStatement(rQuery, this.renderParameters(runContext, statement)));
+        }
+
+        return rStatements;
     }
 
     private Map<String, Object> renderParameters(RunContext runContext, Statement statement) throws Exception {
@@ -236,9 +298,9 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             return Map.of();
         }
 
-        Map<String, Object> parameters = runContext.render(statement.getParameters()).asMap(String.class, Object.class);
+        Map<String, Object> rParameters = runContext.render(statement.getParameters()).asMap(String.class, Object.class);
 
-        return parameters == null ? Map.of() : parameters;
+        return rParameters == null ? Map.of() : rParameters;
     }
 
     private record RenderedStatement(String query, Map<String, Object> parameters) {
@@ -251,6 +313,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
         private long relationshipsDeleted;
         private long propertiesSet;
         private long labelsAdded;
+        private long labelsRemoved;
         private long resultAvailableAfterMillis;
 
         private void add(SummaryCounters counters) {
@@ -260,18 +323,13 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             this.relationshipsDeleted += counters.relationshipsDeleted();
             this.propertiesSet += counters.propertiesSet();
             this.labelsAdded += counters.labelsAdded();
+            this.labelsRemoved += counters.labelsRemoved();
         }
     }
 
     @Builder
     @Getter
     public static class Output implements io.kestra.core.models.tasks.Output {
-        @Schema(
-            title = "Number of statements executed",
-            description = "All statements were committed together, or none were."
-        )
-        private final Long statements;
-
         @Schema(
             title = "Aggregated write counters",
             description = "Sum of the Neo4j counters of every statement of the transaction."
@@ -305,5 +363,8 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
         @Schema(title = "Labels added")
         private final Long labelsAdded;
+
+        @Schema(title = "Labels removed")
+        private final Long labelsRemoved;
     }
 }

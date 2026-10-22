@@ -8,8 +8,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
+import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
-import org.neo4j.driver.exceptions.Neo4jException;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -41,28 +41,30 @@ class TransactionTest {
 
     @Test
     void commitAndCounters() throws Exception {
-        Transaction transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(Property.ofValue(List.of(
-                statement("CREATE (p:TransactionAlice {name: 'Alice', team: 'core'})", null),
-                statement("CREATE (p:TransactionBob {name: 'Bob', team: 'qa'})", null),
-                statement("MATCH (a:TransactionAlice), (b:TransactionBob) CREATE (a)-[:KNOWS]->(b)", null)
-            )))
-            .build();
+        Transaction transaction = transactionWith(List.of(
+            statement("CREATE (p:TransactionAlice {name: 'Alice', team: 'core'})", null),
+            statement("CREATE (p:TransactionBob {name: 'Bob', team: 'qa'})", null),
+            statement("MATCH (a:TransactionAlice), (b:TransactionBob) CREATE (a)-[:KNOWS]->(b)", null)
+        ));
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
         Transaction.Output output = transaction.run(runContext);
 
-        assertThat(output.getStatements(), is(3L));
         assertThat(output.getCounters().getNodesCreated(), is(2L));
         assertThat(output.getCounters().getRelationshipsCreated(), is(1L));
         assertThat(output.getCounters().getPropertiesSet(), is(4L));
         assertThat(output.getCounters().getNodesDeleted(), is(0L));
+        assertThat(output.getCounters().getLabelsAdded(), is(2L));
+        assertThat(output.getCounters().getLabelsRemoved(), is(0L));
         assertThat(output.getResultAvailableAfter() >= 0L, is(true));
+
+        double createdMetric = runContext.metrics().stream()
+            .filter(metric -> "nodes.created".equals(metric.getName()))
+            .mapToDouble(metric -> ((Number) metric.getValue()).doubleValue())
+            .findFirst()
+            .orElseThrow();
+
+        assertThat(createdMetric, is(2.0));
 
         try (Driver driver = driver(); Session session = driver.session()) {
             long nodes = session.run("MATCH (n) WHERE n:TransactionAlice OR n:TransactionBob RETURN count(n) AS c")
@@ -80,22 +82,16 @@ class TransactionTest {
     }
 
     @Test
-    void rollbackOnFailure() throws Exception {
-        Transaction transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(Property.ofValue(List.of(
-                statement("CREATE (p:RollbackPerson {name: 'Ghost'})", null),
-                statement("MATCH p:Invalid RETURN p", null)
-            )))
-            .build();
+    void rollbackOnRuntimeFailure() throws Exception {
+        Transaction transaction = transactionWith(List.of(
+            statement("CREATE (p:RollbackPerson {name: 'Ghost'})", null),
+            statement("RETURN 1 / 0 AS boom", null)
+        ));
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
-        assertThrows(Neo4jException.class, () -> transaction.run(runContext));
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage().contains("Statement 2"), is(true));
 
         try (Driver driver = driver(); Session session = driver.session()) {
             long created = session.run("MATCH (p:RollbackPerson) RETURN count(p) AS c")
@@ -103,26 +99,18 @@ class TransactionTest {
                 .get("c")
                 .asLong();
 
-            // the first statement must have been rolled back with the failing one
             assertThat(created, is(0L));
         }
     }
 
     @Test
     void bindsParameters() throws Exception {
-        Transaction transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(Property.ofValue(List.of(
-                statement(
-                    "CREATE (p:BoundPerson {name: $name, team: $team})",
-                    Map.of("name", "Carol", "team", "product")
-                )
-            )))
-            .build();
+        Transaction transaction = transactionWith(List.of(
+            statement(
+                "CREATE (p:BoundPerson {name: $name, team: $team})",
+                Map.of("name", "Carol", "team", "product")
+            )
+        ));
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
         Transaction.Output output = transaction.run(runContext);
@@ -141,19 +129,48 @@ class TransactionTest {
     }
 
     @Test
+    void rendersInputsOnlyOnce() throws Exception {
+        Transaction transaction = transactionWith(List.of(
+            Statement.builder()
+                .query(Property.ofValue("CREATE (p:RenderOnce {name: $name, note: $note})"))
+                .parameters(Property.ofExpression("{\"name\": \"{{ inputs.name }}\", \"note\": \"{{ inputs.note }}\"}"))
+                .build()
+        ));
+
+        RunContext runContext = TestsUtils.mockRunContext(
+            runContextFactory,
+            transaction,
+            Map.of("name", "{{ 1 + 1 }}", "note", "{{ secret('SHOULD_NEVER_BE_EVALUATED') }}")
+        );
+
+        transaction.run(runContext);
+
+        try (Driver driver = driver(); Session session = driver.session()) {
+            Record record = session.run("MATCH (p:RenderOnce) RETURN p.name AS name, p.note AS note").single();
+
+            assertThat(record.get("name").asString(), is("{{ 1 + 1 }}"));
+            assertThat(record.get("note").asString(), is("{{ secret('SHOULD_NEVER_BE_EVALUATED') }}"));
+        }
+    }
+
+    @Test
     void failsOnEmptyStatements() {
-        Transaction transaction = Transaction.builder()
+        Transaction transaction = transactionWith(List.of());
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+    }
+
+    private Transaction transactionWith(List<Statement> statements) {
+        return Transaction.builder()
             .id(IdUtils.create())
             .type(Transaction.class.getName())
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(Property.ofValue(List.of()))
+            .statements(statements)
             .build();
-
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
-
-        assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
     }
 
     private static Statement statement(String query, Map<String, Object> parameters) {
