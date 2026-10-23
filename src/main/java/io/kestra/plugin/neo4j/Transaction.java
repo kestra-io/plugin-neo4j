@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -13,9 +14,9 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.exceptions.Neo4jException;
-import org.neo4j.driver.summary.ResultSummary;
+import org.neo4j.driver.exceptions.ServiceUnavailableException;
+import org.neo4j.driver.exceptions.SessionExpiredException;
 import org.neo4j.driver.summary.SummaryCounters;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -33,6 +34,7 @@ import io.kestra.plugin.neo4j.models.Statement;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -72,7 +74,7 @@ import lombok.experimental.SuperBuilder;
                     username: "{{ secret('NEO4J_USER') }}"
                     password: "{{ secret('NEO4J_PASSWORD') }}"
                     statements:
-                      - query: "CREATE (:Person {id: $id, name: $name})"
+                      - query: "MERGE (p:Person {id: $id}) SET p.name = $name"
                         parameters:
                           id: "{{ inputs.id }}"
                           name: "{{ inputs.name }}"
@@ -99,6 +101,11 @@ import lombok.experimental.SuperBuilder;
                     password: "{{ secret('NEO4J_PASSWORD') }}"
                     statements:
                       - query: "MATCH (n:Temp) DETACH DELETE n"
+                      - query: |
+                          MERGE (r:CleanupRun {id: $id})
+                          SET r.finishedAt = datetime()
+                        parameters:
+                          id: "{{ execution.id }}"
 
                   - id: log
                     type: io.kestra.plugin.core.log.Log
@@ -146,6 +153,7 @@ import lombok.experimental.SuperBuilder;
 )
 public class Transaction extends AbstractNeo4jConnection implements RunnableTask<Transaction.Output> {
     private static final Duration DEFAULT_MAX_RETRY_TIME = Duration.ofSeconds(30);
+    private static final Duration MAX_RETRY_TIME = Duration.ofMinutes(10);
 
     @JsonIgnore
     @Builder.Default
@@ -154,71 +162,106 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
     @ToString.Exclude
     private AtomicReference<Runnable> driverClose = new AtomicReference<>();
 
+    @Builder.Default
+    @Getter(AccessLevel.NONE)
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private final AtomicBoolean isKilled = new AtomicBoolean(false);
+
     @NotEmpty
     @Schema(
         title = "Cypher statements to run atomically",
         description = "Rendered with Flow variables, then executed in declaration order inside one managed write transaction. A failure in any statement rolls back all of them. The list itself is not rendered as one expression, so `statements: \"{{ outputs.x.list }}\"` does not resolve; template values inside each `query` and `parameters` do."
     )
     @PluginProperty(group = "main")
-    private List<@Valid Statement> statements;
+    private List<@NotNull @Valid Statement> statements;
 
     @Builder.Default
     @Schema(
         title = "Maximum retry time",
-        description = "ISO-8601 duration (default `PT30S`) during which the driver retries the transaction on transient failures such as deadlocks or leader switches."
+        description = "ISO-8601 duration (default `PT30S`, maximum `PT10M`) during which the driver retries the transaction on transient failures such as deadlocks or leader switches. Must be between `PT0S` and `PT10M` inclusive."
     )
     @PluginProperty(group = "reliability")
     private Property<Duration> maxRetryTime = Property.ofValue(DEFAULT_MAX_RETRY_TIME);
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Logger logger = runContext.logger();
+        var logger = runContext.logger();
 
         var rStatements = this.renderStatements(runContext);
 
         var rMaxRetryTime = runContext.render(this.maxRetryTime).as(Duration.class).orElse(DEFAULT_MAX_RETRY_TIME);
-        if (rMaxRetryTime.isNegative()) {
-            throw new IllegalArgumentException("The `maxRetryTime` property must not be negative, got " + rMaxRetryTime + ".");
+        if (rMaxRetryTime.isNegative() || rMaxRetryTime.compareTo(MAX_RETRY_TIME) > 0) {
+            throw new IllegalArgumentException(
+                "The `maxRetryTime` property must be between PT0S and " + MAX_RETRY_TIME + ", got " + rMaxRetryTime + "."
+            );
         }
 
         var config = Config.builder()
             .withMaxTransactionRetryTime(rMaxRetryTime.toMillis(), TimeUnit.MILLISECONDS)
             .build();
 
-        String rUrl = runContext.render(getUrl()).as(String.class)
+        var rUrl = runContext.render(getUrl()).as(String.class)
             .orElseThrow(() -> new IllegalArgumentException("The `url` property is required."));
 
         logger.debug("Executing {} statement(s) in a single managed transaction", rStatements.size());
 
-        try (Driver driver = GraphDatabase.driver(rUrl, this.credentials(runContext), config); Session session = driver.session(this.sessionConfig(runContext))) {
-            this.driverClose.set(driver::closeAsync);
+        try (var driver = GraphDatabase.driver(rUrl, this.credentials(runContext), config); var session = driver.session(this.sessionConfig(runContext))) {
+            var closeDriver = (Runnable) driver::closeAsync;
+            this.driverClose.set(closeDriver);
+            if (this.isKilled.get()) {
+                this.driverClose.compareAndSet(closeDriver, null);
+                closeDriver.run();
+                throw new IllegalStateException("The task was killed before the transaction started, so nothing was written.");
+            }
 
-            AtomicInteger failedStatement = new AtomicInteger(-1);
+            var failedStatement = new AtomicInteger(-1);
 
             Totals totals;
             try {
-                // executeWrite reruns the whole list after a transient failure. When a commit is
-                // ambiguous, the previous attempt may already have been applied, so statements
-                // must be idempotent (MERGE instead of CREATE).
+                // A retried commit may already be applied, so statements must be idempotent.
                 totals = session.executeWrite(transaction -> {
                     var transactionTotals = new Totals();
+                    failedStatement.set(-1);
 
-                    for (int i = 0; i < rStatements.size(); i++) {
+                    for (var i = 0; i < rStatements.size(); i++) {
                         failedStatement.set(i);
                         var rStatement = rStatements.get(i);
 
-                        ResultSummary summary = transaction.run(rStatement.query(), rStatement.parameters()).consume();
+                        var summary = transaction.run(rStatement.query(), rStatement.parameters()).consume();
                         transactionTotals.add(summary.counters());
                         transactionTotals.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
                     }
 
-                    failedStatement.set(-1);
+                    failedStatement.set(rStatements.size());
                     return transactionTotals;
                 });
             } catch (Neo4jException e) {
-                int index = failedStatement.get();
+                if (this.isKilled.get()) {
+                    throw new IllegalStateException(
+                        "The task was killed and the driver was closed, so the transaction outcome is unknown. Check the database before rerunning: " + e.getMessage(),
+                        e
+                    );
+                }
+
+                if (e instanceof ServiceUnavailableException || e instanceof SessionExpiredException) {
+                    throw new IllegalStateException(
+                        "The connection to Neo4j was lost, so the transaction outcome is unknown. Check the database before rerunning: " + e.getMessage(),
+                        e
+                    );
+                }
+
+                var index = failedStatement.get();
                 if (index < 0) {
-                    throw new IllegalStateException("Commit failed and the transaction was rolled back: " + e.getMessage(), e);
+                    throw new IllegalStateException(
+                        "The transaction did not start, so nothing was written: " + e.getMessage()
+                            + ". Check the connection settings and the database name.",
+                        e
+                    );
+                }
+
+                if (index >= rStatements.size()) {
+                    throw new IllegalStateException("The commit failed and the transaction was rolled back: " + e.getMessage(), e);
                 }
 
                 throw new IllegalStateException(
@@ -251,7 +294,11 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
     @Override
     public void kill() {
-        Runnable close = this.driverClose.getAndSet(null);
+        if (!this.isKilled.compareAndSet(false, true)) {
+            return;
+        }
+
+        var close = this.driverClose.getAndSet(null);
         if (close == null) {
             return;
         }
@@ -270,12 +317,9 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
         var rStatements = new ArrayList<RenderedStatement>(this.statements.size());
 
-        for (int i = 0; i < this.statements.size(); i++) {
-            int position = i + 1;
+        for (var i = 0; i < this.statements.size(); i++) {
+            var position = i + 1;
             var statement = this.statements.get(i);
-            if (statement == null) {
-                throw new IllegalArgumentException("Statement " + position + " must not be null.");
-            }
 
             var rQuery = runContext.render(statement.getQuery()).as(String.class)
                 .filter(query -> !query.isBlank())

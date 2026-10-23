@@ -35,8 +35,8 @@ public class Statement {
 
     @Schema(
         title = "Query parameters",
-        description = "Values bound to the `$name` placeholders of `query`, for example `id: \"{{ inputs.id }}\"`."
+        description = "Values bound to the `$name` placeholders of `query`, for example `id: \"{{ inputs.id }}\"`. A value produced by a Pebble expression is bound as a string; cast it in Cypher, for example with `toInteger($id)`."
     )
-    @PluginProperty(group = "main")
+    @PluginProperty(group = "advanced")
     private Property<Map<String, Object>> parameters;
 }

@@ -18,7 +18,6 @@ import org.testcontainers.utility.DockerImageName;
 
 import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
-import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
@@ -44,14 +43,14 @@ class TransactionTest {
 
     @Test
     void commitAndCounters() throws Exception {
-        Transaction transaction = transactionWith(List.of(
+        var transaction = transactionWith(List.of(
             statement("CREATE (p:TransactionAlice {name: 'Alice', team: 'core'})", null),
             statement("CREATE (p:TransactionBob {name: 'Bob', team: 'qa'})", null),
             statement("MATCH (a:TransactionAlice), (b:TransactionBob) CREATE (a)-[:KNOWS]->(b)", null)
         ));
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
-        Transaction.Output output = transaction.run(runContext);
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var output = transaction.run(runContext);
 
         assertThat(output.getCounters().getNodesCreated(), is(2L));
         assertThat(output.getCounters().getRelationshipsCreated(), is(1L));
@@ -61,7 +60,7 @@ class TransactionTest {
         assertThat(output.getCounters().getLabelsRemoved(), is(0L));
         assertThat(output.getResultAvailableAfter(), greaterThanOrEqualTo(0L));
 
-        double createdMetric = runContext.metrics().stream()
+        var createdMetric = runContext.metrics().stream()
             .filter(metric -> "nodes.created".equals(metric.getName()))
             .mapToDouble(metric -> ((Number) metric.getValue()).doubleValue())
             .findFirst()
@@ -75,35 +74,36 @@ class TransactionTest {
 
     @Test
     void rollbackOnRuntimeFailure() throws Exception {
-        Transaction transaction = transactionWith(List.of(
+        var transaction = transactionWith(List.of(
             statement("CREATE (p:RollbackPerson {name: 'Ghost'})", null),
             statement("RETURN 1 / 0 AS boom", null)
         ));
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
         var exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
         assertThat(exception.getMessage(), containsString("Statement 2"));
+        assertThat(exception.getMessage(), containsString("rolled back"));
         assertThat(count("MATCH (p:RollbackPerson) RETURN count(p) AS c"), is(0L));
     }
 
     @Test
     void bindsParameters() throws Exception {
-        Transaction transaction = transactionWith(List.of(
+        var transaction = transactionWith(List.of(
             statement(
                 "CREATE (p:BoundPerson {name: $name, team: $team})",
                 Map.of("name", "Carol", "team", "product")
             )
         ));
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
-        Transaction.Output output = transaction.run(runContext);
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var output = transaction.run(runContext);
 
         assertThat(output.getCounters().getNodesCreated(), is(1L));
         assertThat(output.getCounters().getPropertiesSet(), is(2L));
 
         try (Driver driver = driver(); Session session = driver.session()) {
-            String name = session.run("MATCH (p:BoundPerson) RETURN p.name AS name")
+            var name = session.run("MATCH (p:BoundPerson) RETURN p.name AS name")
                 .single()
                 .get("name")
                 .asString();
@@ -114,14 +114,14 @@ class TransactionTest {
 
     @Test
     void rendersInputsOnlyOnce() throws Exception {
-        Transaction transaction = transactionWith(List.of(
+        var transaction = transactionWith(List.of(
             Statement.builder()
                 .query(Property.ofValue("CREATE (p:RenderOnce {name: $name, note: $note})"))
                 .parameters(Property.ofExpression("{\"name\": \"{{ inputs.name }}\", \"note\": \"{{ inputs.note }}\"}"))
                 .build()
         ));
 
-        RunContext runContext = TestsUtils.mockRunContext(
+        var runContext = TestsUtils.mockRunContext(
             runContextFactory,
             transaction,
             Map.of("name", "{{ 1 + 1 }}", "note", "{{ secret('SHOULD_NEVER_BE_EVALUATED') }}")
@@ -130,7 +130,7 @@ class TransactionTest {
         transaction.run(runContext);
 
         try (Driver driver = driver(); Session session = driver.session()) {
-            Record record = session.run("MATCH (p:RenderOnce) RETURN p.name AS name, p.note AS note").single();
+            var record = session.run("MATCH (p:RenderOnce) RETURN p.name AS name, p.note AS note").single();
 
             assertThat(record.get("name").asString(), is("{{ 1 + 1 }}"));
             assertThat(record.get("note").asString(), is("{{ secret('SHOULD_NEVER_BE_EVALUATED') }}"));
@@ -139,9 +139,9 @@ class TransactionTest {
 
     @Test
     void failsOnBlankQuery() {
-        Transaction transaction = transactionWith(List.of(statement("   ", null)));
+        var transaction = transactionWith(List.of(statement("   ", null)));
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
         var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
         assertThat(exception.getMessage(), containsString("non-blank"));
@@ -159,18 +159,69 @@ class TransactionTest {
             .maxRetryTime(Property.ofValue(Duration.ofSeconds(-5)))
             .build();
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
-        assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("must be between PT0S and PT10M"));
+    }
+
+    @Test
+    void rejectsTooLongMaxRetryTime() {
+        var transaction = Transaction.builder()
+            .id(IdUtils.create())
+            .type(Transaction.class.getName())
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .statements(List.of(statement("RETURN 1 AS one", null)))
+            .maxRetryTime(Property.ofValue(Duration.ofMinutes(11)))
+            .build();
+
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("must be between PT0S and PT10M"));
     }
 
     @Test
     void failsOnEmptyStatements() {
-        Transaction transaction = transactionWith(List.of());
+        var transaction = transactionWith(List.of());
 
-        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
 
-        assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("at least one statement"));
+    }
+
+    @Test
+    void reportsNotStartedWhenAuthenticationFails() {
+        var transaction = Transaction.builder()
+            .id(IdUtils.create())
+            .type(Transaction.class.getName())
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue("wrong-password"))
+            .statements(List.of(statement("RETURN 1 AS one", null)))
+            .build();
+
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        var exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("did not start"));
+        assertThat(exception.getMessage(), containsString("nothing was written"));
+    }
+
+    @Test
+    void killBeforeRunWritesNothing() {
+        var transaction = transactionWith(List.of(statement("CREATE (p:KilledPerson {name: 'Nobody'})", null)));
+
+        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
+
+        transaction.kill();
+
+        var exception = assertThrows(IllegalStateException.class, () -> transaction.run(runContext));
+        assertThat(exception.getMessage(), containsString("killed"));
+        assertThat(count("MATCH (p:KilledPerson) RETURN count(p) AS c"), is(0L));
     }
 
     private Transaction transactionWith(List<Statement> statements) {
