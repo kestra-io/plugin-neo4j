@@ -1,6 +1,6 @@
 # How to use the Neo4j plugin
 
-Run Cypher queries and batch-load data into Neo4j from Kestra flows.
+Run Cypher queries, batch-load data, or run several statements in one transaction against Neo4j from Kestra flows.
 
 ## Authentication
 

@@ -9,8 +9,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
-import org.neo4j.driver.Record;
-import org.neo4j.driver.Session;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -64,7 +62,7 @@ class TransactionTest {
             .filter(metric -> "nodes.created".equals(metric.getName()))
             .mapToDouble(metric -> ((Number) metric.getValue()).doubleValue())
             .findFirst()
-            .orElseThrow();
+            .orElseThrow(() -> new AssertionError("nodes.created metric is missing"));
 
         assertThat(createdMetric, is(2.0));
 
@@ -102,7 +100,7 @@ class TransactionTest {
         assertThat(output.getCounters().getNodesCreated(), is(1L));
         assertThat(output.getCounters().getPropertiesSet(), is(2L));
 
-        try (Driver driver = driver(); Session session = driver.session()) {
+        try (var driver = driver(); var session = driver.session()) {
             var name = session.run("MATCH (p:BoundPerson) RETURN p.name AS name")
                 .single()
                 .get("name")
@@ -129,7 +127,7 @@ class TransactionTest {
 
         transaction.run(runContext);
 
-        try (Driver driver = driver(); Session session = driver.session()) {
+        try (var driver = driver(); var session = driver.session()) {
             var record = session.run("MATCH (p:RenderOnce) RETURN p.name AS name, p.note AS note").single();
 
             assertThat(record.get("name").asString(), is("{{ 1 + 1 }}"));
@@ -236,7 +234,7 @@ class TransactionTest {
     }
 
     private static Statement statement(String query, Map<String, Object> parameters) {
-        Statement.StatementBuilder builder = Statement.builder()
+        var builder = Statement.builder()
             .query(Property.ofValue(query));
 
         if (parameters != null) {
@@ -247,7 +245,7 @@ class TransactionTest {
     }
 
     private long count(String cypher) {
-        try (Driver driver = driver(); Session session = driver.session()) {
+        try (var driver = driver(); var session = driver.session()) {
             return session.run(cypher).single().get("c").asLong();
         }
     }

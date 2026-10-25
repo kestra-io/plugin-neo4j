@@ -10,9 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.neo4j.driver.Config;
-import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
-import org.neo4j.driver.Session;
 import org.neo4j.driver.exceptions.Neo4jException;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
@@ -160,8 +158,9 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
     @Getter(AccessLevel.NONE)
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
-    private AtomicReference<Runnable> driverClose = new AtomicReference<>();
+    private final AtomicReference<Runnable> driverClose = new AtomicReference<>();
 
+    @JsonIgnore
     @Builder.Default
     @Getter(AccessLevel.NONE)
     @EqualsAndHashCode.Exclude
@@ -193,7 +192,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
         var rMaxRetryTime = runContext.render(this.maxRetryTime).as(Duration.class).orElse(DEFAULT_MAX_RETRY_TIME);
         if (rMaxRetryTime.isNegative() || rMaxRetryTime.compareTo(MAX_RETRY_TIME) > 0) {
             throw new IllegalArgumentException(
-                "The `maxRetryTime` property must be between PT0S and " + MAX_RETRY_TIME + ", got " + rMaxRetryTime + "."
+                "The `maxRetryTime` property must be between PT0S and %s, got %s.".formatted(MAX_RETRY_TIME, rMaxRetryTime)
             );
         }
 
@@ -236,17 +235,22 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
                     failedStatement.set(rStatements.size());
                     return transactionTotals;
                 });
-            } catch (Neo4jException e) {
+            } catch (RuntimeException e) {
+                // A kill closes the driver, which can surface as a non-Neo4j exception from the retry loop
                 if (this.isKilled.get()) {
                     throw new IllegalStateException(
-                        "The task was killed and the driver was closed, so the transaction outcome is unknown. Check the database before rerunning: " + e.getMessage(),
+                        "The task was killed and the driver was closed, so the transaction outcome is unknown. Check the database before rerunning: %s".formatted(e.getMessage()),
                         e
                     );
                 }
 
+                if (!(e instanceof Neo4jException)) {
+                    throw e;
+                }
+
                 if (e instanceof ServiceUnavailableException || e instanceof SessionExpiredException) {
                     throw new IllegalStateException(
-                        "The connection to Neo4j was lost, so the transaction outcome is unknown. Check the database before rerunning: " + e.getMessage(),
+                        "The connection to Neo4j was lost, so the transaction outcome is unknown. Check the database before rerunning: %s".formatted(e.getMessage()),
                         e
                     );
                 }
@@ -254,19 +258,17 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
                 var index = failedStatement.get();
                 if (index < 0) {
                     throw new IllegalStateException(
-                        "The transaction did not start, so nothing was written: " + e.getMessage()
-                            + ". Check the connection settings and the database name.",
+                        "The transaction did not start, so nothing was written: %s. Check the connection settings and the database name.".formatted(e.getMessage()),
                         e
                     );
                 }
 
                 if (index >= rStatements.size()) {
-                    throw new IllegalStateException("The commit failed and the transaction was rolled back: " + e.getMessage(), e);
+                    throw new IllegalStateException("The commit failed and the transaction was rolled back: %s".formatted(e.getMessage()), e);
                 }
 
                 throw new IllegalStateException(
-                    "Statement " + (index + 1) + " failed and the transaction was rolled back: " + e.getMessage()
-                        + ". Check the query and parameters of statement " + (index + 1) + ".",
+                    "Statement %d failed and the transaction was rolled back: %s. Check the query and parameters of statement %d.".formatted(index + 1, e.getMessage(), index + 1),
                     e
                 );
             }
@@ -323,7 +325,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
 
             var rQuery = runContext.render(statement.getQuery()).as(String.class)
                 .filter(query -> !query.isBlank())
-                .orElseThrow(() -> new IllegalArgumentException("Statement " + position + " must define a non-blank `query`."));
+                .orElseThrow(() -> new IllegalArgumentException("Statement %d must define a non-blank `query`.".formatted(position)));
 
             rStatements.add(new RenderedStatement(rQuery, runContext.render(statement.getParameters()).asMap(String.class, Object.class)));
         }
