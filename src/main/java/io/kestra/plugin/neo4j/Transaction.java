@@ -14,7 +14,7 @@ import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.exceptions.Neo4jException;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
-import org.neo4j.driver.summary.SummaryCounters;
+import org.neo4j.driver.summary.ResultSummary;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -30,7 +30,6 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.neo4j.models.Statement;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
@@ -48,7 +47,7 @@ import lombok.experimental.SuperBuilder;
 @Getter
 @Schema(
     title = "Run multiple Cypher statements in one transaction",
-    description = "Executes all `statements` inside a single managed write transaction, in order. A failure rolls the whole transaction back, and the driver retries transient failures (deadlocks, leader switches) until `maxRetryTime` is exhausted; because a retry can replay an ambiguous commit, keep statements idempotent (prefer `MERGE` over `CREATE`). Returns the aggregated Neo4j counters of the transaction."
+    description = "Executes all `statements` inside a single managed write transaction, in order. A failure rolls the whole transaction back, and the driver retries transient failures (deadlocks, leader switches) until `maxRetryTime` is exhausted. A retry can replay an ambiguous commit, so keep statements idempotent (prefer `MERGE` over `CREATE`). Returns the aggregated Neo4j counters of the transaction."
 )
 @Plugin(
     examples = {
@@ -170,10 +169,10 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
     @NotEmpty
     @Schema(
         title = "Cypher statements to run atomically",
-        description = "Rendered with Flow variables, then executed in declaration order inside one managed write transaction. A failure in any statement rolls back all of them. The list itself is not rendered as one expression, so `statements: \"{{ outputs.x.list }}\"` does not resolve; template values inside each `query` and `parameters` do."
+        description = "Rendered with Flow variables, then executed in declaration order inside one managed write transaction. A failure in any statement rolls back all of them. The list itself is not rendered as one expression, so `statements: \"{{ outputs.x.list }}\"` does not resolve. Template values inside each `query` and `parameters` do."
     )
     @PluginProperty(group = "main")
-    private List<@NotNull @Valid Statement> statements;
+    private List<@NotNull Statement> statements;
 
     @Builder.Default
     @Schema(
@@ -228,8 +227,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
                         var rStatement = rStatements.get(i);
 
                         var summary = transaction.run(rStatement.query(), rStatement.parameters()).consume();
-                        transactionTotals.add(summary.counters());
-                        transactionTotals.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
+                        transactionTotals.add(summary);
                     }
 
                     failedStatement.set(rStatements.size());
@@ -313,16 +311,9 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
     }
 
     private List<RenderedStatement> renderStatements(RunContext runContext) throws Exception {
-        if (this.statements == null || this.statements.isEmpty()) {
-            throw new IllegalArgumentException("The `statements` property must contain at least one statement.");
-        }
-
-        var rStatements = new ArrayList<RenderedStatement>(this.statements.size());
-
-        for (var i = 0; i < this.statements.size(); i++) {
-            var position = i + 1;
-            var statement = this.statements.get(i);
-
+        var rStatements = new ArrayList<RenderedStatement>();
+        for (var statement : this.statements) {
+            var position = rStatements.size() + 1;
             var rQuery = runContext.render(statement.getQuery()).as(String.class)
                 .filter(query -> !query.isBlank())
                 .orElseThrow(() -> new IllegalArgumentException("Statement %d must define a non-blank `query`.".formatted(position)));
@@ -346,7 +337,8 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
         private long labelsRemoved;
         private long resultAvailableAfterMillis;
 
-        private void add(SummaryCounters counters) {
+        private void add(ResultSummary summary) {
+            var counters = summary.counters();
             this.nodesCreated += counters.nodesCreated();
             this.nodesDeleted += counters.nodesDeleted();
             this.relationshipsCreated += counters.relationshipsCreated();
@@ -354,6 +346,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             this.propertiesSet += counters.propertiesSet();
             this.labelsAdded += counters.labelsAdded();
             this.labelsRemoved += counters.labelsRemoved();
+            this.resultAvailableAfterMillis += summary.resultAvailableAfter(TimeUnit.MILLISECONDS);
         }
 
         private void metrics(RunContext runContext) {

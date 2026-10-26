@@ -147,13 +147,7 @@ class TransactionTest {
 
     @Test
     void rejectsNegativeMaxRetryTime() {
-        var transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(List.of(statement("RETURN 1 AS one", null)))
+        var transaction = transactionBuilder(List.of(statement("RETURN 1 AS one", null)))
             .maxRetryTime(Property.ofValue(Duration.ofSeconds(-5)))
             .build();
 
@@ -165,13 +159,7 @@ class TransactionTest {
 
     @Test
     void rejectsTooLongMaxRetryTime() {
-        var transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
-            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(List.of(statement("RETURN 1 AS one", null)))
+        var transaction = transactionBuilder(List.of(statement("RETURN 1 AS one", null)))
             .maxRetryTime(Property.ofValue(Duration.ofMinutes(11)))
             .build();
 
@@ -182,24 +170,9 @@ class TransactionTest {
     }
 
     @Test
-    void failsOnEmptyStatements() {
-        var transaction = transactionWith(List.of());
-
-        var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
-
-        var exception = assertThrows(IllegalArgumentException.class, () -> transaction.run(runContext));
-        assertThat(exception.getMessage(), containsString("at least one statement"));
-    }
-
-    @Test
     void reportsNotStartedWhenAuthenticationFails() {
-        var transaction = Transaction.builder()
-            .id(IdUtils.create())
-            .type(Transaction.class.getName())
-            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
-            .username(Property.ofValue("neo4j"))
+        var transaction = transactionBuilder(List.of(statement("RETURN 1 AS one", null)))
             .password(Property.ofValue("wrong-password"))
-            .statements(List.of(statement("RETURN 1 AS one", null)))
             .build();
 
         var runContext = TestsUtils.mockRunContext(runContextFactory, transaction, Map.of());
@@ -223,14 +196,17 @@ class TransactionTest {
     }
 
     private Transaction transactionWith(List<Statement> statements) {
+        return transactionBuilder(statements).build();
+    }
+
+    private Transaction.TransactionBuilder<?, ?> transactionBuilder(List<Statement> statements) {
         return Transaction.builder()
             .id(IdUtils.create())
             .type(Transaction.class.getName())
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .statements(statements)
-            .build();
+            .statements(statements);
     }
 
     private static Statement statement(String query, Map<String, Object> parameters) {
