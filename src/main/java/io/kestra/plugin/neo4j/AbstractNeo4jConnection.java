@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.driver.AuthToken;
@@ -40,6 +41,7 @@ import lombok.experimental.SuperBuilder;
 public abstract class AbstractNeo4jConnection extends Task implements Neo4jConnectionInterface {
     public static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(30);
     public static final int DEFAULT_MAX_CONNECTION_POOL_SIZE = 100;
+    private static final int MAX_CERT_BYTES = 1024 * 1024;
 
     private Property<String> url;
 
@@ -148,6 +150,13 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     @PluginProperty(group = "connection")
     private Property<AccessMode> accessMode = Property.ofValue(AccessMode.WRITE);
 
+    @Schema(
+        title = "Neo4j database name",
+        description = "Target database for the session (e.g. `neo4j`). When empty, the server default database is used."
+    )
+    @PluginProperty(group = "connection")
+    private Property<String> database;
+
     protected AuthToken credentials(RunContext runContext) throws IllegalVariableEvaluationException {
         return buildAuthToken(
             renderedOrNull(runContext, username),
@@ -226,6 +235,10 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
     }
 
     protected Config driverConfig(RunContext runContext) throws Exception {
+        return driverConfigBuilder(runContext).build();
+    }
+
+    protected Config.ConfigBuilder driverConfigBuilder(RunContext runContext) throws Exception {
         Config.ConfigBuilder builder = Config.builder();
 
         Boolean encryption = runContext.render(this.encryption).as(Boolean.class).orElse(null);
@@ -274,9 +287,13 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
             certificateFile = materializeCertificate(runContext, certificate);
         }
 
+        if (trustStrategy == TrustStrategy.ALL) {
+            runContext.logger().warn("Neo4j `trustStrategy` is ALL: server certificates are not validated. Do not use this outside development or tests.");
+        }
+
         builder.withTrustStrategy(buildTrustStrategy(trustStrategy, certificateFile));
 
-        return builder.build();
+        return builder;
     }
 
     static Config.TrustStrategy buildTrustStrategy(TrustStrategy trustStrategy, File certificateFile) {
@@ -287,19 +304,17 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
         };
     }
 
-    /**
-     * Materializes a rendered {@code trustedCertificate} value into a temporary PEM file.
-     * The value is either inline PEM content or a Kestra internal storage URI.
-     * The file lives in the task working directory (cleaned up with it) so it stays
-     * available while the driver needs it. Certificate content is never logged.
-     */
+    // The file must outlive the driver setup, so it lives in the task working directory.
     protected File materializeCertificate(RunContext runContext, String certificate) throws Exception {
         byte[] bytes;
         String source;
         String value = certificate.strip();
         if (value.startsWith("kestra://")) {
             try (InputStream input = runContext.storage().getFile(URI.create(value))) {
-                bytes = input.readAllBytes();
+                bytes = input.readNBytes(MAX_CERT_BYTES + 1);
+            }
+            if (bytes.length > MAX_CERT_BYTES) {
+                throw new IllegalArgumentException("Invalid Neo4j TLS configuration: `trustedCertificate` exceeds the " + MAX_CERT_BYTES + " bytes limit.");
             }
             source = "internal storage";
         } else {
@@ -320,13 +335,15 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
 
     protected SessionConfig sessionConfig(RunContext runContext) throws IllegalVariableEvaluationException {
         AccessMode mode = runContext.render(this.accessMode).as(AccessMode.class).orElse(AccessMode.WRITE);
-        return buildSessionConfig(mode);
+        return buildSessionConfig(mode, renderedOrNull(runContext, database));
     }
 
-    static SessionConfig buildSessionConfig(AccessMode accessMode) {
-        return SessionConfig.builder()
-            .withDefaultAccessMode(toDriverAccessMode(accessMode))
-            .build();
+    static SessionConfig buildSessionConfig(AccessMode accessMode, String database) {
+        var builder = SessionConfig.builder().withDefaultAccessMode(toDriverAccessMode(accessMode));
+        if (database != null) {
+            builder.withDatabase(database);
+        }
+        return builder.build();
     }
 
     static org.neo4j.driver.AccessMode toDriverAccessMode(AccessMode accessMode) {
@@ -350,7 +367,7 @@ public abstract class AbstractNeo4jConnection extends Task implements Neo4jConne
         if (url == null) {
             return false;
         }
-        String normalized = url.strip().toLowerCase(java.util.Locale.ROOT);
+        String normalized = url.strip().toLowerCase(Locale.ROOT);
         int end = normalized.indexOf("://");
         if (end < 0) {
             return false;

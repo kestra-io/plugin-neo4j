@@ -88,8 +88,11 @@ tasks:
     username: "{{ vars.username }}"
     password: "{{ vars.password }}"
     query: |
-      MATCH (p:Person {name: "Dave"})
+      MATCH (p:Person {name: $name})
       RETURN p
+    parameters:
+      name: "Dave"
+    database: neo4j
     storeType: FETCHONE
 
   - id: store_people
@@ -102,6 +105,17 @@ tasks:
       RETURN p
       ORDER BY p.name
     storeType: STORE
+
+  - id: transaction_temp
+    type: io.kestra.plugin.neo4j.Transaction
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    statements:
+      - query: "CREATE (:Temp {name: \"ephemeral\"})"
+      - query: |
+          MATCH (t:Temp {name: "ephemeral"})
+          DETACH DELETE t
 
   - id: assert
     type: io.kestra.plugin.core.execution.Assert
@@ -116,6 +130,8 @@ tasks:
       - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
       - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
       - "{{ outputs.store_people.size == 4 }}"
+      - "{{ outputs.transaction_temp.counters.nodesCreated == 1 }}"
+      - "{{ outputs.transaction_temp.counters.nodesDeleted == 1 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true) | length == 4 }}"
       - "{{ fromIon(read(outputs.store_people.uri), allRows=true)[2].p.name == 'Carol' }}"
 

@@ -57,13 +57,20 @@ class Neo4jDriverConfigTest {
 
     @Test
     void sessionConfigDefaultsToWrite() {
-        SessionConfig sessionConfig = AbstractNeo4jConnection.buildSessionConfig(AccessMode.WRITE);
+        SessionConfig sessionConfig = AbstractNeo4jConnection.buildSessionConfig(AccessMode.WRITE, null);
         assertThat(sessionConfig.defaultAccessMode(), is(org.neo4j.driver.AccessMode.WRITE));
     }
 
     @Test
     void sessionConfigSupportsRead() {
-        SessionConfig sessionConfig = AbstractNeo4jConnection.buildSessionConfig(AccessMode.READ);
+        SessionConfig sessionConfig = AbstractNeo4jConnection.buildSessionConfig(AccessMode.READ, null);
+        assertThat(sessionConfig.defaultAccessMode(), is(org.neo4j.driver.AccessMode.READ));
+    }
+
+    @Test
+    void sessionConfigCombinesDatabaseAndAccessMode() {
+        SessionConfig sessionConfig = AbstractNeo4jConnection.buildSessionConfig(AccessMode.READ, "analytics");
+        assertThat(sessionConfig.database().orElse(null), is("analytics"));
         assertThat(sessionConfig.defaultAccessMode(), is(org.neo4j.driver.AccessMode.READ));
     }
 

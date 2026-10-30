@@ -1,9 +1,9 @@
 plugins {
-    id 'io.kestra.gradle.repository-conventions' version '1.2.11'
-    id 'io.kestra.gradle.spotless-conventions' version '1.2.11'
+    id 'io.kestra.gradle.repository-conventions' version '1.2.12'
+    id 'io.kestra.gradle.spotless-conventions' version '1.2.12'
     id "com.vanniktech.maven.publish" version "0.37.0"
-    id "io.kestra.gradle.inject-bom-versions" version '1.2.11'
-    id "io.kestra.gradle.plugin-doc-lint" version '1.2.11'
+    id "io.kestra.gradle.inject-bom-versions" version '1.2.12'
+    id "io.kestra.gradle.plugin-doc-lint" version '1.2.12'
     id 'java-library'
     id "idea"
     id 'jacoco'
@@ -54,7 +54,7 @@ dependencies {
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
 
     // neo4j driver
-    api 'org.neo4j.driver:neo4j-java-driver:6.2.1'
+    api 'org.neo4j.driver:neo4j-java-driver:6.3.0'
 }
 
 
@@ -96,7 +96,7 @@ dependencies {
     testImplementation "org.testcontainers:testcontainers-neo4j:2.0.5"
 
     // sanity checks
-    testImplementation "io.kestra.plugin:plugin-docker:1.6.2"
+    testImplementation "io.kestra.plugin:plugin-docker:1.8.1"
 }
 
 /**********************************************************************************************************************\

@@ -3,7 +3,7 @@
 ## What
 
 - Provides plugin components under `io.kestra.plugin.neo4j`.
-- Includes classes such as `Batch`, `Query`, `StoreType`.
+- Includes classes such as `Batch`, `Query`, `Transaction`, `StoreType`.
 
 ## Why
 
@@ -23,6 +23,8 @@ Single-module plugin. Source packages under `io.kestra.plugin`:
 
 - `io.kestra.plugin.neo4j.Batch`
 - `io.kestra.plugin.neo4j.Query`
+- `io.kestra.plugin.neo4j.Transaction`
+- `io.kestra.plugin.neo4j.Trigger`
 
 ### Project Structure
 

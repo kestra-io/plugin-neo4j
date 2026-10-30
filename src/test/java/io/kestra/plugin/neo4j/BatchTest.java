@@ -75,12 +75,36 @@ public class BatchTest {
         assertThat(run.getRowCount().intValue(), is(25000));
     }
 
+    @Test
+    void batchWithDatabase() throws Exception {
+        Batch batch = Batch.builder()
+            .id(IdUtils.create())
+            .type(Batch.class.getName())
+            .query(Property.ofValue(query()))
+            .url(Property.ofValue(neo4jContainer.getBoltUrl()))
+            .username(Property.ofValue("neo4j"))
+            .password(Property.ofValue(neo4jContainer.getAdminPassword()))
+            .database(Property.ofValue("neo4j"))
+            .from(Property.ofValue(createTestFile(100).toString()))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, batch, ImmutableMap.of());
+        Batch.Output run = batch.run(runContext);
+
+        assertThat(run.getUpdatedCount(), is(100));
+        assertThat(run.getRowCount().intValue(), is(100));
+    }
+
     URI createTestFile() throws Exception {
+        return createTestFile(25000);
+    }
+
+    URI createTestFile(int count) throws Exception {
         RunContext runContext = runContextFactory.of(ImmutableMap.of());
 
         File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
         OutputStream output = new FileOutputStream(tempFile);
-        for (int i = 0; i < 25000; i++) {
+        for (int i = 0; i < count; i++) {
             Map<String, Object> n1 = new HashMap<>();
             n1.put("name", UUID.randomUUID().toString());
             n1.put("position", UUID.randomUUID().toString());
@@ -92,7 +116,7 @@ public class BatchTest {
         try (InputStream is = new BufferedInputStream(storageInterface.get(TenantService.MAIN_TENANT, null, uri), FileSerde.BUFFER_SIZE)) {
             List<Object> result = new ArrayList<>();
             FileSerde.read(is, result::add);
-            assertThat(result.size(), is(25000));
+            assertThat(result.size(), is(count));
         }
 
         return uri;

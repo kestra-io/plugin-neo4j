@@ -70,6 +70,33 @@ import reactor.core.publisher.Mono;
         ),
         @Example(
             full = true,
+            title = "Bind Cypher parameters",
+            code = """
+                id: neo4j_query_params
+                namespace: company.team
+
+                inputs:
+                  - id: name
+                    type: STRING
+                    defaults: aDeveloper
+
+                tasks:
+                  - id: query
+                    type: io.kestra.plugin.neo4j.Query
+                    url: "{{ secret('NEO4J_URL') }}"
+                    username: "{{ secret('NEO4J_USERNAME') }}"
+                    password: "{{ secret('NEO4J_PASSWORD') }}"
+                    query: |
+                        MATCH (p:Person {name: $name})
+                        RETURN p
+                    parameters:
+                      name: "{{ inputs.name }}"
+                    storeType: FETCH
+                """
+        ),
+        @Example(
+            full = true,
+            title = "Connect with a private CA certificate",
             code = """
                 id: neo4j_query_private_ca
                 namespace: company.team
@@ -91,6 +118,25 @@ import reactor.core.publisher.Mono;
         ),
         @Example(
             full = true,
+            title = "Target a specific database",
+            code = """
+                id: neo4j_query_database
+                namespace: company.team
+
+                tasks:
+                  - id: query
+                    type: io.kestra.plugin.neo4j.Query
+                    url: "{{ secret('NEO4J_URL') }}"
+                    username: "{{ secret('NEO4J_USERNAME') }}"
+                    password: "{{ secret('NEO4J_PASSWORD') }}"
+                    database: neo4j
+                    query: "MATCH (n) RETURN n"
+                    storeType: FETCHONE
+                """
+        ),
+        @Example(
+            full = true,
+            title = "Route to read servers",
             code = """
                 id: neo4j_query_read
                 namespace: company.team
@@ -138,6 +184,13 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     @PluginProperty(group = "destination")
     private Property<StoreType> storeType = Property.ofValue(StoreType.NONE);
 
+    @Schema(
+        title = "Query parameters",
+        description = "Map of parameter names to values bound as `$name` in the Cypher query. Nested maps and lists are rendered recursively. Values produced by a Pebble expression are bound as strings; cast in Cypher when another type is required, e.g. `toInteger($age)`."
+    )
+    @PluginProperty(group = "advanced")
+    private Property<Map<String, Object>> parameters;
+
     @Override
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
@@ -147,7 +200,8 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
             String render = runContext.render(query).as(String.class).orElse(null);
             logger.debug("Starting query: {}", render);
-            Result result = session.run(render);
+            var rParameters = runContext.render(parameters).asMap(String.class, Object.class);
+            Result result = rParameters.isEmpty() ? session.run(render) : session.run(render, rParameters);
 
             switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
                 case STORE: {
