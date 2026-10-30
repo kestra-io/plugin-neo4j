@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.neo4j.driver.Config;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.exceptions.Neo4jException;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
@@ -195,7 +194,7 @@ public class Transaction extends AbstractNeo4jConnection implements RunnableTask
             );
         }
 
-        var config = Config.builder()
+        var config = this.driverConfigBuilder(runContext)
             .withMaxTransactionRetryTime(rMaxRetryTime.toMillis(), TimeUnit.MILLISECONDS)
             .build();
 
