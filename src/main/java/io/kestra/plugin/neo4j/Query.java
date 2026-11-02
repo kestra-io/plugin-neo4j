@@ -96,6 +96,28 @@ import reactor.core.publisher.Mono;
         ),
         @Example(
             full = true,
+            title = "Connect with a private CA certificate",
+            code = """
+                id: neo4j_query_private_ca
+                namespace: company.team
+
+                tasks:
+                  - id: query
+                    type: io.kestra.plugin.neo4j.Query
+                    url: "bolt://localhost:7687"
+                    username: "{{ secret('NEO4J_USERNAME') }}"
+                    password: "{{ secret('NEO4J_PASSWORD') }}"
+                    encryption: true
+                    trustStrategy: CUSTOM
+                    trustedCertificate: "{{ secret('NEO4J_CA_PEM') }}"
+                    query: |
+                        MATCH (p:Person)
+                        RETURN p
+                    storeType: FETCH
+                """
+        ),
+        @Example(
+            full = true,
             title = "Target a specific database",
             code = """
                 id: neo4j_query_database
@@ -109,6 +131,26 @@ import reactor.core.publisher.Mono;
                     password: "{{ secret('NEO4J_PASSWORD') }}"
                     database: neo4j
                     query: "MATCH (n) RETURN n"
+                    storeType: FETCHONE
+                """
+        ),
+        @Example(
+            full = true,
+            title = "Route to read servers",
+            code = """
+                id: neo4j_query_read
+                namespace: company.team
+
+                tasks:
+                  - id: query
+                    type: io.kestra.plugin.neo4j.Query
+                    url: "{{ url }}"
+                    username: "{{ secret('NEO4J_USERNAME') }}"
+                    password: "{{ secret('NEO4J_PASSWORD') }}"
+                    accessMode: READ
+                    query: |
+                        MATCH (p:Person)
+                        RETURN p
                     storeType: FETCHONE
                 """
         )
@@ -153,10 +195,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public Output run(RunContext runContext) throws Exception {
         Logger logger = runContext.logger();
 
-        try (
-            Driver driver = GraphDatabase.driver(runContext.render(getUrl()).as(String.class).orElse(null), this.credentials(runContext));
-            Session session = driver.session(this.sessionConfig(runContext))
-        ) {
+        try (Driver driver = this.buildDriver(runContext); Session session = this.openSession(driver, runContext)) {
             Output.OutputBuilder output = Output.builder();
 
             String render = runContext.render(query).as(String.class).orElse(null);
