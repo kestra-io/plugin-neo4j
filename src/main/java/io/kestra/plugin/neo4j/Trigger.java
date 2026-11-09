@@ -48,9 +48,9 @@ import lombok.experimental.SuperBuilder;
                 namespace: company.team
 
                 tasks:
-                  - id: process_rows
-                    type: io.kestra.plugin.core.debug.Return
-                    format: "{{ trigger.size }}"
+                  - id: log_row_count
+                    type: io.kestra.plugin.core.log.Log
+                    message: "{{ trigger.size }}"
 
                 triggers:
                   - id: watch
