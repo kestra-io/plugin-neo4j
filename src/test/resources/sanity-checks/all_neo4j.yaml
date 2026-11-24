@@ -27,7 +27,7 @@ tasks:
     password: "{{ vars.password }}"
     query: |
       RETURN {status: "ready"} AS health
-    storeType: FETCHONE
+    fetchType: FETCH_ONE
     retry:
       type: constant
       interval: PT5S
@@ -80,7 +80,7 @@ tasks:
       MATCH (p:Person)
       RETURN p
       ORDER BY p.name
-    storeType: FETCH
+    fetchType: FETCH
 
   - id: fetch_one_person
     type: io.kestra.plugin.neo4j.Query
@@ -93,7 +93,7 @@ tasks:
     parameters:
       name: "Dave"
     database: neo4j
-    storeType: FETCHONE
+    fetchType: FETCH_ONE
 
   - id: store_people
     type: io.kestra.plugin.neo4j.Query
@@ -104,7 +104,7 @@ tasks:
       MATCH (p:Person)
       RETURN p
       ORDER BY p.name
-    storeType: STORE
+    fetchType: STORE
 
   - id: transaction_temp
     type: io.kestra.plugin.neo4j.Transaction

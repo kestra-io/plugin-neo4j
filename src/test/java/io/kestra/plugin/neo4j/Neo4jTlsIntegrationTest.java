@@ -29,7 +29,7 @@ import io.kestra.core.storages.StorageInterface;
 import io.kestra.core.tenant.TenantService;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 import io.kestra.plugin.neo4j.models.TrustStrategy;
 
 import jakarta.inject.Inject;
@@ -73,7 +73,7 @@ class Neo4jTlsIntegrationTest {
         Query query = baseQueryBuilder()
             .encryption(Property.ofValue(true))
             .trustedCertificate(Property.ofValue(testCaPem()))
-            .storeType(Property.ofValue(StoreType.FETCHONE))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -93,7 +93,7 @@ class Neo4jTlsIntegrationTest {
         Query query = baseQueryBuilder()
             .encryption(Property.ofValue(true))
             .trustedCertificate(Property.ofValue(uri.toString()))
-            .storeType(Property.ofValue(StoreType.FETCHONE))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -107,7 +107,7 @@ class Neo4jTlsIntegrationTest {
         Query query = baseQueryBuilder()
             .encryption(Property.ofValue(true))
             .trustStrategy(Property.ofValue(TrustStrategy.SYSTEM))
-            .storeType(Property.ofValue(StoreType.FETCHONE))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -120,7 +120,7 @@ class Neo4jTlsIntegrationTest {
     void plaintextFailsWhenTlsIsRequired() {
         Query query = baseQueryBuilder()
             .encryption(Property.ofValue(false))
-            .storeType(Property.ofValue(StoreType.FETCHONE))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());

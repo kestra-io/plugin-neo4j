@@ -19,7 +19,7 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 
 import jakarta.inject.Inject;
 
@@ -42,7 +42,7 @@ class TriggerTest {
     @Container
     private static final Neo4jContainer<?> neo4jContainer = new Neo4jContainer<>(DockerImageName.parse("neo4j:4.4"));
 
-    private Trigger createTrigger(String cypher, StoreType storeType) {
+    private Trigger createTrigger(String cypher, FetchType fetchType) {
         return Trigger.builder()
             .id(IdUtils.create())
             .type(Trigger.class.getName())
@@ -50,12 +50,12 @@ class TriggerTest {
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
             .query(Property.ofValue(cypher))
-            .storeType(Property.ofValue(storeType))
+            .fetchType(Property.ofValue(fetchType))
             .build();
     }
 
     private Trigger createTrigger(String cypher) {
-        return createTrigger(cypher, StoreType.FETCH);
+        return createTrigger(cypher, FetchType.FETCH);
     }
 
     private Optional<Execution> evaluateTrigger(Trigger trigger) throws Exception {
@@ -92,7 +92,7 @@ class TriggerTest {
         var trigger = createTrigger(
             "MATCH (p:TriggerTestPerson {name: 'this-person-does-not-exist'}) " +
                 "RETURN p.name AS name",
-            StoreType.STORE
+            FetchType.STORE
         );
 
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
@@ -130,7 +130,7 @@ class TriggerTest {
 
     @Test
     void storesResultsWhenRowsExist() throws Exception {
-        var trigger = createTrigger("RETURN {name: 'Alice'} AS person", StoreType.STORE);
+        var trigger = createTrigger("RETURN {name: 'Alice'} AS person", FetchType.STORE);
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
         var runContext = mocked.getKey().getRunContext();
         var storedOutput = new AtomicReference<Query.Output>();
@@ -154,8 +154,8 @@ class TriggerTest {
     }
 
     @Test
-    void rejectsNoneStoreType() throws Exception {
-        var trigger = createTrigger("RETURN 1 AS value", StoreType.NONE);
+    void rejectsNoneFetchType() throws Exception {
+        var trigger = createTrigger("RETURN 1 AS value", FetchType.NONE);
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
 
         var exception = assertThrows(

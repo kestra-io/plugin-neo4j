@@ -30,7 +30,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
@@ -65,7 +65,7 @@ import reactor.core.publisher.Mono;
                     query: |
                         MATCH (p:Person)
                         RETURN p
-                    storeType: FETCH
+                    fetchType: FETCH
                 """
         ),
         @Example(
@@ -91,7 +91,7 @@ import reactor.core.publisher.Mono;
                         RETURN p
                     parameters:
                       name: "{{ inputs.name }}"
-                    storeType: FETCH
+                    fetchType: FETCH
                 """
         ),
         @Example(
@@ -113,7 +113,7 @@ import reactor.core.publisher.Mono;
                     query: |
                         MATCH (p:Person)
                         RETURN p
-                    storeType: FETCH
+                    fetchType: FETCH
                 """
         ),
         @Example(
@@ -131,7 +131,7 @@ import reactor.core.publisher.Mono;
                     password: "{{ secret('NEO4J_PASSWORD') }}"
                     database: neo4j
                     query: "MATCH (n) RETURN n"
-                    storeType: FETCHONE
+                    fetchType: FETCH_ONE
                 """
         ),
         @Example(
@@ -151,7 +151,7 @@ import reactor.core.publisher.Mono;
                     query: |
                         MATCH (p:Person)
                         RETURN p
-                    storeType: FETCHONE
+                    fetchType: FETCH_ONE
                 """
         )
     },
@@ -164,7 +164,7 @@ import reactor.core.publisher.Mono;
         @Metric(
             name = "fetch.size",
             type = Counter.TYPE,
-            description = "The number of records fetched in FETCH or FETCHONE mode."
+            description = "The number of records fetched in FETCH or FETCH_ONE mode."
         )
     }
 )
@@ -178,11 +178,22 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
     @Schema(
         title = "Result handling mode",
-        description = "FETCHONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
+        description = "FETCH_ONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
     )
-    @Builder.Default
     @PluginProperty(group = "destination")
-    private Property<StoreType> storeType = Property.ofValue(StoreType.NONE);
+    private Property<FetchType> fetchType;
+
+    @Deprecated
+    @Schema(deprecated = true, description = "Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.")
+    @PluginProperty(group = "destination")
+    private Property<FetchType> storeType;
+
+    private Property<FetchType> effectiveFetchType() {
+        if (fetchType != null) {
+            return fetchType;
+        }
+        return storeType != null ? storeType : Property.ofValue(FetchType.NONE);
+    }
 
     @Schema(
         title = "Query parameters",
@@ -203,7 +214,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             var rParameters = runContext.render(parameters).asMap(String.class, Object.class);
             Result result = rParameters.isEmpty() ? session.run(render) : session.run(render, rParameters);
 
-            switch (runContext.render(storeType).as(StoreType.class).orElseThrow()) {
+            switch (runContext.render(effectiveFetchType()).as(FetchType.class).orElseThrow()) {
                 case STORE: {
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));
@@ -219,7 +230,7 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
                     runContext.metric(Counter.of("fetch.size", fetchedResult.size()));
                     break;
                 }
-                case FETCHONE: {
+                case FETCH_ONE: {
                     List<Map<String, Object>> fetchedResult = this.fetchResult(result);
                     output.row(!fetchedResult.isEmpty() ? fetchedResult.getFirst() : ImmutableMap.of());
                     output.size((long) fetchedResult.size());
@@ -237,19 +248,19 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
             title = "Fetched rows",
-            description = "Populated when storeType is `FETCH`. One map per record, keyed by the column names of the `RETURN` clause (e.g. `RETURN p` gives `rows[0].p.name`); nodes and relationships are exposed as their properties."
+            description = "Populated when fetchType is `FETCH`. One map per record, keyed by the column names of the `RETURN` clause (e.g. `RETURN p` gives `rows[0].p.name`); nodes and relationships are exposed as their properties."
         )
         private List<Map<String, Object>> rows;
 
         @Schema(
             title = "First fetched row",
-            description = "Populated when storeType is `FETCHONE`. A map keyed by the column names of the `RETURN` clause (e.g. `RETURN count(n) AS total` gives `row.total`)."
+            description = "Populated when fetchType is `FETCH_ONE`. A map keyed by the column names of the `RETURN` clause (e.g. `RETURN count(n) AS total` gives `row.total`)."
         )
         private Map<String, Object> row;
 
         @Schema(
             title = "Stored result URI",
-            description = "Populated when storeType is `STORE`; points to internal storage."
+            description = "Populated when fetchType is `STORE`; points to internal storage."
         )
         private URI uri;
 

@@ -30,7 +30,7 @@ import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.neo4j.models.AccessMode;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 
 import jakarta.inject.Inject;
 
@@ -95,7 +95,7 @@ class QueryTest {
             "RETURN p";
     }
 
-    static Query buildQuery(String query, StoreType storeType) {
+    static Query buildQuery(String query, FetchType fetchType) {
         return Query.builder()
             .id(IdUtils.create())
             .type(Query.class.getName())
@@ -103,7 +103,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(storeType))
+            .fetchType(Property.ofValue(fetchType))
             .build();
     }
 
@@ -139,7 +139,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetch() throws Exception {
-        Query query = buildQuery(query(), StoreType.FETCH);
+        Query query = buildQuery(query(), FetchType.FETCH);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -158,7 +158,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchOne() throws Exception {
-        Query query = buildQuery(query(), StoreType.FETCHONE);
+        Query query = buildQuery(query(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -180,7 +180,7 @@ class QueryTest {
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
             .accessMode(Property.ofValue(AccessMode.READ))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -191,7 +191,7 @@ class QueryTest {
 
     @Test
     void fetchOneScalar() throws Exception {
-        Query query = buildQuery(scalarQuery(), StoreType.FETCHONE);
+        Query query = buildQuery(scalarQuery(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -203,7 +203,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchMultipleColumns() throws Exception {
-        Query query = buildQuery(multipleColumnsQuery(), StoreType.FETCH);
+        Query query = buildQuery(multipleColumnsQuery(), FetchType.FETCH);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -220,7 +220,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchOneMapColumn() throws Exception {
-        Query query = buildQuery(mapColumnQuery(), StoreType.FETCHONE);
+        Query query = buildQuery(mapColumnQuery(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -231,7 +231,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchOneNestedNodes() throws Exception {
-        Query query = buildQuery(nestedNodesQuery(), StoreType.FETCHONE);
+        Query query = buildQuery(nestedNodesQuery(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -246,7 +246,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchOnePath() throws Exception {
-        Query query = buildQuery(pathQuery(), StoreType.FETCHONE);
+        Query query = buildQuery(pathQuery(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -265,7 +265,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void fetchOnePointAndDuration() throws Exception {
-        Query query = buildQuery(temporalAndSpatialQuery(), StoreType.FETCHONE);
+        Query query = buildQuery(temporalAndSpatialQuery(), FetchType.FETCH_ONE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -281,7 +281,7 @@ class QueryTest {
 
     @Test
     void store() throws Exception {
-        Query query = buildQuery(query(), StoreType.STORE);
+        Query query = buildQuery(query(), FetchType.STORE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -292,7 +292,7 @@ class QueryTest {
     @Test
     @SuppressWarnings("unchecked")
     void storeScalars() throws Exception {
-        Query query = buildQuery(scalarColumnQuery(), StoreType.STORE);
+        Query query = buildQuery(scalarColumnQuery(), FetchType.STORE);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
         Query.Output run = query.run(runContext);
@@ -310,7 +310,7 @@ class QueryTest {
 
     @Test
     void failed() throws Exception {
-        Query query = buildQuery(invalidQuery(), StoreType.FETCH);
+        Query query = buildQuery(invalidQuery(), FetchType.FETCH);
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
 
@@ -331,7 +331,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -354,7 +354,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("personName", "aQa"));
@@ -378,7 +378,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("dept", "engineering"));
@@ -402,7 +402,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of("tag1", "red", "tag2", "blue"));
@@ -423,7 +423,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -444,7 +444,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
@@ -465,7 +465,7 @@ class QueryTest {
             .url(Property.ofValue(neo4jContainer.getBoltUrl()))
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
-            .storeType(Property.ofValue(StoreType.FETCH))
+            .fetchType(Property.ofValue(FetchType.FETCH))
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());

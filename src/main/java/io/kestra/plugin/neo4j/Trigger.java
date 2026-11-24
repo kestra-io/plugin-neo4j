@@ -14,7 +14,7 @@ import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerOutput;
 import io.kestra.core.models.triggers.TriggerService;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -36,7 +36,7 @@ import lombok.experimental.SuperBuilder;
         "The trigger keeps no state between polls and fires again on every interval while the query returns rows. " +
         "Make the query idempotent, for example by filtering on a processed flag and updating it after processing. " +
         "The trigger polls the default Neo4j database only. Database selection and query parameters are not currently configurable. " +
-        "storeType: NONE is unsupported and fails with an error."
+        "fetchType: NONE is unsupported and fails with an error."
 )
 @Plugin(
     examples = {
@@ -96,11 +96,22 @@ public class Trigger extends AbstractTrigger
 
     @Schema(
         title = "Result handling mode",
-        description = "Controls how query results are handled. FETCH (default) returns all rows, FETCHONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error."
+        description = "Controls how query results are handled. FETCH (default) returns all rows, FETCH_ONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error."
     )
-    @Builder.Default
     @PluginProperty(group = "destination")
-    private Property<StoreType> storeType = Property.ofValue(StoreType.FETCH);
+    private Property<FetchType> fetchType;
+
+    @Deprecated
+    @Schema(deprecated = true, description = "Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.")
+    @PluginProperty(group = "destination")
+    private Property<FetchType> storeType;
+
+    private Property<FetchType> effectiveFetchType() {
+        if (fetchType != null) {
+            return fetchType;
+        }
+        return storeType != null ? storeType : Property.ofValue(FetchType.FETCH);
+    }
 
     @Schema(
         title = "Polling interval",
@@ -119,7 +130,7 @@ public class Trigger extends AbstractTrigger
             .password(this.password)
             .bearerToken(this.bearerToken)
             .query(this.query)
-            .storeType(this.storeType)
+            .fetchType(this.effectiveFetchType())
             .build();
     }
 
@@ -128,9 +139,9 @@ public class Trigger extends AbstractTrigger
         ConditionContext conditionContext,
         TriggerContext context) throws Exception {
         var runContext = conditionContext.getRunContext();
-        var resolvedStoreType = runContext.render(this.storeType).as(StoreType.class).orElse(StoreType.FETCH);
-        if (resolvedStoreType == StoreType.NONE) {
-            throw new IllegalArgumentException("storeType NONE is not supported for Neo4j triggers; use FETCH, FETCHONE, or STORE");
+        var resolvedFetchType = runContext.render(this.effectiveFetchType()).as(FetchType.class).orElse(FetchType.FETCH);
+        if (resolvedFetchType == FetchType.NONE) {
+            throw new IllegalArgumentException("fetchType NONE is not supported for Neo4j triggers; use FETCH, FETCH_ONE, or STORE");
         }
         var logger = runContext.logger();
         var queryTask = this.createQuery();
