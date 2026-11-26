@@ -179,7 +179,9 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     @Schema(
         title = "Result handling mode",
         defaultValue = "NONE",
-        description = "FETCH_ONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
+        description = """
+            FETCH_ONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default).
+            """
     )
     @PluginProperty(group = "destination")
     private Property<FetchType> fetchType;
@@ -256,25 +258,33 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
     public static class Output implements io.kestra.core.models.tasks.Output {
         @Schema(
             title = "Fetched rows",
-            description = "Populated when fetchType is `FETCH`. One map per record, keyed by the column names of the `RETURN` clause (e.g. `RETURN p` gives `rows[0].p.name`); nodes and relationships are exposed as their properties."
+            description = """
+                Populated when fetchType is `FETCH`. One map per record, keyed by the column names of the `RETURN` clause (e.g. `RETURN p` gives `rows[0].p.name`); nodes and relationships are exposed as their properties.
+                """
         )
         private List<Map<String, Object>> rows;
 
         @Schema(
             title = "First fetched row",
-            description = "Populated when fetchType is `FETCH_ONE`. A map keyed by the column names of the `RETURN` clause (e.g. `RETURN count(n) AS total` gives `row.total`)."
+            description = """
+                Populated when fetchType is `FETCH_ONE`. A map keyed by the column names of the `RETURN` clause (e.g. `RETURN count(n) AS total` gives `row.total`).
+                """
         )
         private Map<String, Object> row;
 
         @Schema(
             title = "Stored result URI",
-            description = "Populated when fetchType is `STORE`; points to internal storage."
+            description = """
+                Populated when fetchType is `STORE`; points to internal storage.
+                """
         )
         private URI uri;
 
         @Schema(
             title = "Row count",
-            description = "Number of rows fetched or stored."
+            description = """
+                Number of rows fetched or stored.
+                """
         )
         private Long size;
     }

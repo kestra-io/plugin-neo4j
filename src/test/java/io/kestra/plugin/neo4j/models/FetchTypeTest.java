@@ -1,6 +1,6 @@
 package io.kestra.plugin.neo4j.models;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.kestra.core.serializers.JacksonMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,7 +20,7 @@ class FetchTypeTest {
 
     @Test
     void deserializesLegacyAndCurrentValues() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
+        var mapper = JacksonMapper.ofJson();
 
         assertEquals(FetchType.FETCH_ONE, mapper.readValue("\"FETCHONE\"", FetchType.class));
         assertEquals(FetchType.FETCH_ONE, mapper.readValue("\"FETCH_ONE\"", FetchType.class));

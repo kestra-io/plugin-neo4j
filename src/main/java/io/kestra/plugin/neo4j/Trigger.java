@@ -97,7 +97,9 @@ public class Trigger extends AbstractTrigger
     @Schema(
         title = "Result handling mode",
         defaultValue = "FETCH",
-        description = "Controls how query results are handled. FETCH (default) returns all rows, FETCH_ONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error."
+        description = """
+            Controls how query results are handled. FETCH (default) returns all rows, FETCH_ONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error.
+            """
     )
     @PluginProperty(group = "destination")
     private Property<FetchType> fetchType;
