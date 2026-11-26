@@ -1,3 +1,4 @@
+
 package io.kestra.plugin.neo4j;
 
 import java.io.FileNotFoundException;
@@ -17,6 +18,7 @@ import io.kestra.core.models.executions.Execution;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.neo4j.models.FetchType;
@@ -101,8 +103,7 @@ class TriggerTest {
         var storedUri = new AtomicReference<URI>();
         var testTrigger = spy(trigger);
         var query = spy(trigger.createQuery());
-        doAnswer(invocation ->
-        {
+        doAnswer(invocation -> {
             var output = (Query.Output) invocation.callRealMethod();
             storedUri.set(output.getUri());
             assertNotNull(runContext.storage().getAttributes(output.getUri()));
@@ -135,8 +136,7 @@ class TriggerTest {
         var runContext = mocked.getKey().getRunContext();
         var storedOutput = new AtomicReference<Query.Output>();
         var query = spy(trigger.createQuery());
-        doAnswer(invocation ->
-        {
+        doAnswer(invocation -> {
             var output = (Query.Output) invocation.callRealMethod();
             storedOutput.set(output);
             return output;
@@ -164,5 +164,46 @@ class TriggerTest {
         );
 
         assertTrue(exception.getMessage().contains("NONE is not supported"));
+    }
+
+    @Test
+    void supportsLegacyFetchOneFromYaml() throws Exception {
+        var yaml = """
+            id: legacy_fetch_one
+            type: io.kestra.plugin.neo4j.Trigger
+            url: "%s"
+            username: neo4j
+            password: "%s"
+            query: "RETURN {name: 'Alice'} AS person"
+            storeType: FETCHONE
+            """.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword());
+
+        var trigger = JacksonMapper.ofYaml().readValue(yaml, Trigger.class);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var result = trigger.evaluate(mocked.getKey(), mocked.getValue());
+
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void fetchTypeTakesPrecedenceOverLegacyStoreTypeFromYaml() throws Exception {
+        var yaml = """
+            id: fetch_type_precedence
+            type: io.kestra.plugin.neo4j.Trigger
+            url: "%s"
+            username: neo4j
+            password: "%s"
+            query: "RETURN {name: 'Alice'} AS person"
+            storeType: NONE
+            fetchType: FETCH
+            """.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword());
+
+        var trigger = JacksonMapper.ofYaml().readValue(yaml, Trigger.class);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var result = trigger.evaluate(mocked.getKey(), mocked.getValue());
+
+        assertTrue(result.isPresent());
     }
 }

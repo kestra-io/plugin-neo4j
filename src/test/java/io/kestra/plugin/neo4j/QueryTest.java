@@ -26,6 +26,7 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
@@ -39,6 +40,8 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @KestraTest
@@ -475,4 +478,36 @@ class QueryTest {
         List<String> names = rows.stream().map(row -> (String) row.get("name")).toList();
         assertThat(names, hasItems("neo4j", "system"));
     }
+    @Test
+    void supportsLegacyFetchOneFromYaml() throws Exception {
+        var yaml = "id: legacy_fetch_one\n" +
+            "type: io.kestra.plugin.neo4j.Query\n" +
+            "url: \"%s\"\n" +
+            "username: neo4j\n" +
+            "password: \"%s\"\n" +
+            "query: \"MATCH (p:Person) RETURN p\"\n" +
+            "storeType: FETCHONE\n";
+        var query = JacksonMapper.ofYaml().readValue(yaml.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword()), Query.class);
+        var runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        var output = query.run(runContext);
+        assertNotNull(output.getRow().get("p"));
+    }
+
+    @Test
+    void fetchTypeTakesPrecedenceWhenDeserializedFromYaml() throws Exception {
+        var yaml = "id: fetch_type_precedence\n" +
+            "type: io.kestra.plugin.neo4j.Query\n" +
+            "url: \"%s\"\n" +
+            "username: neo4j\n" +
+            "password: \"%s\"\n" +
+            "query: \"MATCH (p:Person) RETURN p\"\n" +
+            "storeType: STORE\n" +
+            "fetchType: FETCH\n";
+        var query = JacksonMapper.ofYaml().readValue(yaml.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword()), Query.class);
+        var runContext = TestsUtils.mockRunContext(runContextFactory, query, ImmutableMap.of());
+        var output = query.run(runContext);
+        assertThat(output.getRows().size(), is(2));
+        assertNull(output.getUri());
+    }
+
 }

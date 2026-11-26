@@ -95,6 +95,14 @@ tasks:
     database: neo4j
     fetchType: FETCH_ONE
 
+  - id: legacy_fetch_one
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: "MATCH (p:Person {name: 'Alice'}) RETURN p"
+    storeType: FETCHONE
+
   - id: store_people
     type: io.kestra.plugin.neo4j.Query
     url: "bolt://localhost:{{ outputs.init.values.port }}"
@@ -129,6 +137,7 @@ tasks:
       - "{{ outputs.fetch_people.rows[3].p.score == 9 }}"
       - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
       - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
+      - "{{ outputs.legacy_fetch_one.row.p.name == 'Alice' }}"
       - "{{ outputs.store_people.size == 4 }}"
       - "{{ outputs.transaction_temp.counters.nodesCreated == 1 }}"
       - "{{ outputs.transaction_temp.counters.nodesDeleted == 1 }}"

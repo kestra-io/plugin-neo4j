@@ -178,13 +178,20 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
 
     @Schema(
         title = "Result handling mode",
+        defaultValue = "NONE",
         description = "FETCH_ONE returns the first row; FETCH returns all rows; STORE writes all rows to internal storage; NONE skips result handling (default)."
     )
     @PluginProperty(group = "destination")
     private Property<FetchType> fetchType;
 
     @Deprecated
-    @Schema(deprecated = true, description = "Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.")
+    @Schema(
+        title = "Deprecated result handling mode",
+        deprecated = true,
+        description = """
+            Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.
+            """
+    )
     @PluginProperty(group = "destination")
     private Property<FetchType> storeType;
 
@@ -214,7 +221,8 @@ public class Query extends AbstractNeo4jConnection implements RunnableTask<Query
             var rParameters = runContext.render(parameters).asMap(String.class, Object.class);
             Result result = rParameters.isEmpty() ? session.run(render) : session.run(render, rParameters);
 
-            switch (runContext.render(effectiveFetchType()).as(FetchType.class).orElseThrow()) {
+            var rFetchType = runContext.render(effectiveFetchType()).as(FetchType.class).orElse(FetchType.NONE);
+            switch (rFetchType) {
                 case STORE: {
                     Map.Entry<URI, Long> store = this.storeResult(result, runContext);
                     runContext.metric(Counter.of("store.size", store.getValue()));

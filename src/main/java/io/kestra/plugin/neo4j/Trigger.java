@@ -96,13 +96,20 @@ public class Trigger extends AbstractTrigger
 
     @Schema(
         title = "Result handling mode",
+        defaultValue = "FETCH",
         description = "Controls how query results are handled. FETCH (default) returns all rows, FETCH_ONE returns the first row, and STORE writes results to internal storage. NONE is unsupported for triggers and fails with an error."
     )
     @PluginProperty(group = "destination")
     private Property<FetchType> fetchType;
 
     @Deprecated
-    @Schema(deprecated = true, description = "Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.")
+    @Schema(
+        title = "Deprecated result handling mode",
+        deprecated = true,
+        description = """
+            Deprecated. Use fetchType instead. fetchType takes precedence when both properties are set.
+            """
+    )
     @PluginProperty(group = "destination")
     private Property<FetchType> storeType;
 
@@ -139,8 +146,8 @@ public class Trigger extends AbstractTrigger
         ConditionContext conditionContext,
         TriggerContext context) throws Exception {
         var runContext = conditionContext.getRunContext();
-        var resolvedFetchType = runContext.render(this.effectiveFetchType()).as(FetchType.class).orElse(FetchType.FETCH);
-        if (resolvedFetchType == FetchType.NONE) {
+        var rFetchType = runContext.render(this.effectiveFetchType()).as(FetchType.class).orElse(FetchType.FETCH);
+        if (rFetchType == FetchType.NONE) {
             throw new IllegalArgumentException("fetchType NONE is not supported for Neo4j triggers; use FETCH, FETCH_ONE, or STORE");
         }
         var logger = runContext.logger();
