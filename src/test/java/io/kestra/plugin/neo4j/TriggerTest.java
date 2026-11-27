@@ -17,9 +17,10 @@ import io.kestra.core.models.executions.Execution;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.serializers.JacksonMapper;
 import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
-import io.kestra.plugin.neo4j.models.StoreType;
+import io.kestra.plugin.neo4j.models.FetchType;
 
 import jakarta.inject.Inject;
 
@@ -42,7 +43,7 @@ class TriggerTest {
     @Container
     private static final Neo4jContainer<?> neo4jContainer = new Neo4jContainer<>(DockerImageName.parse("neo4j:4.4"));
 
-    private Trigger createTrigger(String cypher, StoreType storeType) {
+    private Trigger createTrigger(String cypher, FetchType fetchType) {
         return Trigger.builder()
             .id(IdUtils.create())
             .type(Trigger.class.getName())
@@ -50,12 +51,12 @@ class TriggerTest {
             .username(Property.ofValue("neo4j"))
             .password(Property.ofValue(neo4jContainer.getAdminPassword()))
             .query(Property.ofValue(cypher))
-            .storeType(Property.ofValue(storeType))
+            .fetchType(Property.ofValue(fetchType))
             .build();
     }
 
     private Trigger createTrigger(String cypher) {
-        return createTrigger(cypher, StoreType.FETCH);
+        return createTrigger(cypher, FetchType.FETCH);
     }
 
     private Optional<Execution> evaluateTrigger(Trigger trigger) throws Exception {
@@ -92,7 +93,7 @@ class TriggerTest {
         var trigger = createTrigger(
             "MATCH (p:TriggerTestPerson {name: 'this-person-does-not-exist'}) " +
                 "RETURN p.name AS name",
-            StoreType.STORE
+            FetchType.STORE
         );
 
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
@@ -101,8 +102,7 @@ class TriggerTest {
         var storedUri = new AtomicReference<URI>();
         var testTrigger = spy(trigger);
         var query = spy(trigger.createQuery());
-        doAnswer(invocation ->
-        {
+        doAnswer(invocation -> {
             var output = (Query.Output) invocation.callRealMethod();
             storedUri.set(output.getUri());
             assertNotNull(runContext.storage().getAttributes(output.getUri()));
@@ -130,13 +130,12 @@ class TriggerTest {
 
     @Test
     void storesResultsWhenRowsExist() throws Exception {
-        var trigger = createTrigger("RETURN {name: 'Alice'} AS person", StoreType.STORE);
+        var trigger = createTrigger("RETURN {name: 'Alice'} AS person", FetchType.STORE);
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
         var runContext = mocked.getKey().getRunContext();
         var storedOutput = new AtomicReference<Query.Output>();
         var query = spy(trigger.createQuery());
-        doAnswer(invocation ->
-        {
+        doAnswer(invocation -> {
             var output = (Query.Output) invocation.callRealMethod();
             storedOutput.set(output);
             return output;
@@ -154,8 +153,8 @@ class TriggerTest {
     }
 
     @Test
-    void rejectsNoneStoreType() throws Exception {
-        var trigger = createTrigger("RETURN 1 AS value", StoreType.NONE);
+    void rejectsNoneFetchType() throws Exception {
+        var trigger = createTrigger("RETURN 1 AS value", FetchType.NONE);
         var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
 
         var exception = assertThrows(
@@ -164,5 +163,46 @@ class TriggerTest {
         );
 
         assertTrue(exception.getMessage().contains("NONE is not supported"));
+    }
+
+    @Test
+    void supportsLegacyFetchOneFromYaml() throws Exception {
+        var yaml = """
+            id: legacy_fetch_one
+            type: io.kestra.plugin.neo4j.Trigger
+            url: "%s"
+            username: neo4j
+            password: "%s"
+            query: "RETURN {name: 'Alice'} AS person"
+            storeType: FETCHONE
+            """.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword());
+
+        var trigger = JacksonMapper.ofYaml().readValue(yaml, Trigger.class);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var result = trigger.evaluate(mocked.getKey(), mocked.getValue());
+
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void fetchTypeTakesPrecedenceOverLegacyStoreTypeFromYaml() throws Exception {
+        var yaml = """
+            id: fetch_type_precedence
+            type: io.kestra.plugin.neo4j.Trigger
+            url: "%s"
+            username: neo4j
+            password: "%s"
+            query: "RETURN {name: 'Alice'} AS person"
+            storeType: NONE
+            fetchType: FETCH
+            """.formatted(neo4jContainer.getBoltUrl(), neo4jContainer.getAdminPassword());
+
+        var trigger = JacksonMapper.ofYaml().readValue(yaml, Trigger.class);
+        var mocked = TestsUtils.mockTrigger(runContextFactory, trigger);
+
+        var result = trigger.evaluate(mocked.getKey(), mocked.getValue());
+
+        assertTrue(result.isPresent());
     }
 }

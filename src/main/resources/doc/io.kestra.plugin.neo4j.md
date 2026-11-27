@@ -32,7 +32,7 @@ Tune `connectionTimeout` (default 30 seconds) and `maxConnectionPoolSize` (defau
 
 ## Tasks
 
-`Query` runs a Cypher statement set in `query`. Control result handling with `storeType`: `NONE` (default, discards results), `FETCH` returns all rows, `FETCHONE` returns the first row, `STORE` writes results to internal storage. Bind values safely with `parameters` (e.g. `MATCH (p:Person {name: $name})` with `parameters: {name: "Alice"}`) instead of rendering them into the query string. Target a specific database with `database` (e.g. `analytics`); when empty, the server default database is used. Use `accessMode: READ` to route sessions to read servers in a cluster (default `WRITE`).
+`Query` runs a Cypher statement set in `query`. Control result handling with `fetchType`: `NONE` (default, discards results), `FETCH` returns all rows, `FETCH_ONE` returns the first row, `STORE` writes results to internal storage. Bind values safely with `parameters` (e.g. `MATCH (p:Person {name: $name})` with `parameters: {name: "Alice"}`) instead of rendering them into the query string. Target a specific database with `database` (e.g. `analytics`); when empty, the server default database is used. Use `accessMode: READ` to route sessions to read servers in a cluster (default `WRITE`).
 
 `Batch` bulk-loads data from a file in internal storage — set `from` to a `kestra://` URI and `query` to a Cypher `UNWIND $props AS ...` statement. Control batch size with `chunk` (default 1000). Like `Query`, it runs against `database` when set and the server default otherwise.
 
@@ -45,7 +45,7 @@ Tune `connectionTimeout` (default 30 seconds) and `maxConnectionPoolSize` (defau
 Key properties:
 
 - `query` — Cypher query to execute.
-- `storeType` — controls result handling: `FETCH` (default), `FETCHONE`, or `STORE`. `NONE` is unsupported for triggers and throws an error.
+- `fetchType` — controls result handling: `FETCH` (default), `FETCH_ONE`, or `STORE`. `NONE` is unsupported for triggers and throws an error.
 - `interval` — time between query executions, defaulting to 60 seconds.
 
 Trigger outputs include:
@@ -57,4 +57,6 @@ Trigger outputs include:
 
 The trigger does not keep state between polls. If the query continues to return rows, the trigger fires again on every polling interval. To avoid processing the same records repeatedly, use an idempotent query pattern, such as filtering on a processed flag and updating that flag after processing.
 
-`storeType: NONE` is unsupported and throws an `IllegalArgumentException`.
+`fetchType: NONE` is unsupported and throws an `IllegalArgumentException`.
+
+For backward compatibility, `Query` and `Trigger` still accept the deprecated `storeType` property. When both `fetchType` and `storeType` are configured, `fetchType` takes precedence. The legacy enum value `FETCHONE` is also accepted as an alias for `FETCH_ONE`.

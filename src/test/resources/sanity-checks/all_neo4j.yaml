@@ -27,7 +27,7 @@ tasks:
     password: "{{ vars.password }}"
     query: |
       RETURN {status: "ready"} AS health
-    storeType: FETCHONE
+    fetchType: FETCH_ONE
     retry:
       type: constant
       interval: PT5S
@@ -80,7 +80,7 @@ tasks:
       MATCH (p:Person)
       RETURN p
       ORDER BY p.name
-    storeType: FETCH
+    fetchType: FETCH
 
   - id: fetch_one_person
     type: io.kestra.plugin.neo4j.Query
@@ -93,6 +93,14 @@ tasks:
     parameters:
       name: "Dave"
     database: neo4j
+    fetchType: FETCH_ONE
+
+  - id: legacy_fetch_one
+    type: io.kestra.plugin.neo4j.Query
+    url: "bolt://localhost:{{ outputs.init.values.port }}"
+    username: "{{ vars.username }}"
+    password: "{{ vars.password }}"
+    query: "MATCH (p:Person {name: 'Alice'}) RETURN p"
     storeType: FETCHONE
 
   - id: store_people
@@ -104,7 +112,7 @@ tasks:
       MATCH (p:Person)
       RETURN p
       ORDER BY p.name
-    storeType: STORE
+    fetchType: STORE
 
   - id: transaction_temp
     type: io.kestra.plugin.neo4j.Transaction
@@ -129,6 +137,7 @@ tasks:
       - "{{ outputs.fetch_people.rows[3].p.score == 9 }}"
       - "{{ outputs.fetch_one_person.row.p.name == 'Dave' }}"
       - "{{ outputs.fetch_one_person.row.p.team == 'engineering' }}"
+      - "{{ outputs.legacy_fetch_one.row.p.name == 'Alice' }}"
       - "{{ outputs.store_people.size == 4 }}"
       - "{{ outputs.transaction_temp.counters.nodesCreated == 1 }}"
       - "{{ outputs.transaction_temp.counters.nodesDeleted == 1 }}"
